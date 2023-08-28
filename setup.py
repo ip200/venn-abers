@@ -1,7 +1,7 @@
 from distutils.core import setup
 setup(
   name='venn-abers',
-  packages=['venn-abers'],
+  packages=['src/'],
   version='0.1',
   license='MIT',
   description='Venn-ABERS calibration package',
