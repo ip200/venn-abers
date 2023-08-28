@@ -15,7 +15,7 @@ setup(
   author='Ivan Petej',
   author_email='ivan.petej@gmail.com',
   url='https://github.com/ip200/venn-abers',
-  download_url='https://github.com/ip200/venn-abers/archive/refs/tags/v_02.tar.gz',
+  download_url='https://github.com/ip200/venn-abers/archive/refs/tags/v_03.tar.gz',
   keywords=['Probabilistic classification', 'calibration'],
   install_requires=[
           'numpy',
