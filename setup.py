@@ -1,14 +1,21 @@
 from distutils.core import setup
+
+with open("README.md", "r") as fh:
+    long_description = fh.read()
+
 setup(
   name='venn-abers',
-  packages=['src/'],
-  version='0.1',
+  packages=['venn_abers'],
+  package_dir={'venn_abers': 'src'},
+  version='0.3',
   license='MIT',
   description='Venn-ABERS calibration package',
+  long_description=long_description,
+  long_description_content_type="text/markdown",
   author='Ivan Petej',
   author_email='ivan.petej@gmail.com',
   url='https://github.com/ip200/venn-abers',
-  download_url='https://github.com/ip200/venn-abers/archive/refs/tags/v_01.tar.gz',
+  download_url='https://github.com/ip200/venn-abers/archive/refs/tags/v_02.tar.gz',
   keywords=['Probabilistic classification', 'calibration'],
   install_requires=[
           'numpy',
@@ -17,8 +24,7 @@ setup(
   classifiers=[
     'Development Status :: 3 - Alpha',
     'Intended Audience :: Developers',
-    'Topic :: Machine learning',
-    'License :: MIT License',
-    'Programming Language :: Python :: 3.11',
+    "License :: OSI Approved :: MIT License",
+    'Programming Language :: Python :: 3',
   ],
 )
