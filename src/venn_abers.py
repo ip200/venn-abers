@@ -503,7 +503,6 @@ class VennAbersMultiClass:
         if self.inductive and self.cal_size is None and self.train_proper_size is None:
             raise Exception("For Inductive Venn-ABERS please provide either calibration or proper train set size")
 
-
         self.classes = np.unique(_y_train)
         self.n_classes = len(self.classes)
 
@@ -689,6 +688,7 @@ class VennAbersCalibrator:
         self.shuffle = shuffle
         self.stratify = stratify
         self.va_calibrator = None
+        self.classes = None
 
     def fit(self,
             _x_train,
@@ -709,7 +709,7 @@ class VennAbersCalibrator:
 
         # integrity checks
         if not self.inductive and self.n_splits is None:
-            raise Exception("For Cross Venn ABERS please provide n_splits")
+            raise Exception("For Cross Venn-ABERS please provide n_splits")
         if self.inductive and self.cal_size is None and self.train_proper_size is None:
             raise Exception("For Inductive Venn-ABERS please provide either calibration or proper train set size")
 
@@ -723,6 +723,8 @@ class VennAbersCalibrator:
             shuffle=self.shuffle,
             stratify=self.stratify
             )
+
+        self.classes = np.unique(_y_train)
         self.va_calibrator.fit(_x_train, _y_train)
 
     def predict_proba(self, _x_test=None, p_cal=None, y_cal=None, p_test=None, loss='log'):
@@ -788,7 +790,7 @@ class VennAbersCalibrator:
                     Test set probabilities (Manual Venn-ABERS only)
 
                 one_hot: bool, default=True
-                    If True returns one hot encoded labels, integer labels otherwise
+                    If True returns one hot encoded labels, class labels otherwise
 
                 loss : str, default='log'
                     Log or Brier loss (for IVAP and CVAP only). For further details of calculation
@@ -805,5 +807,5 @@ class VennAbersCalibrator:
             y_pred = np.zeros(p_prime.shape)
             y_pred[np.arange(y_pred.shape[0]), idx] = 1
         else:
-            y_pred = idx
+            y_pred = np.array([self.classes[i] for i in idx])
         return y_pred
