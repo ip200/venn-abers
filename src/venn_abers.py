@@ -1,6 +1,8 @@
 import numpy as np
 from sklearn.model_selection import StratifiedKFold, train_test_split
 from sklearn.multiclass import OneVsOneClassifier
+from sklearn.utils.validation import check_is_fitted
+from sklearn.exceptions import NotFittedError
 
 np.seterr(divide='ignore', invalid='ignore')
 
@@ -340,16 +342,20 @@ class VennAbersCV:
         """
         if self.inductive:
             self.n_splits = 1
-            x_train_proper, x_cal, y_train_proper, y_cal = train_test_split(
-                _x_train,
-                _y_train,
-                test_size=self.cal_size,
-                train_size=self.train_proper_size,
-                random_state=self.random_state,
-                shuffle=self.shuffle,
-                stratify=self.stratify
-            )
-            self.estimator.fit(x_train_proper, y_train_proper.flatten())
+            try:
+                check_is_fitted(self.estimator)
+                x_cal, y_cal = _x_train, _y_train
+            except NotFittedError:
+                x_train_proper, x_cal, y_train_proper, y_cal = train_test_split(
+                    _x_train,
+                    _y_train,
+                    test_size=self.cal_size,
+                    train_size=self.train_proper_size,
+                    random_state=self.random_state,
+                    shuffle=self.shuffle,
+                    stratify=self.stratify
+                )
+                self.estimator.fit(x_train_proper, y_train_proper.flatten())
             clf_prob = self.estimator.predict_proba(x_cal)
             self.clf_p_cal.append(clf_prob)
             self.clf_y_cal.append(y_cal)
@@ -500,8 +506,11 @@ class VennAbersMultiClass:
         # integrity checks
         if not self.inductive and self.n_splits is None:
             raise Exception("For Cross Venn ABERS please provide n_splits")
-        if self.inductive and self.cal_size is None and self.train_proper_size is None:
-            raise Exception("For Inductive Venn-ABERS please provide either calibration or proper train set size")
+        try:
+            check_is_fitted(self.estimator)
+        except NotFittedError:
+            if self.inductive and self.cal_size is None and self.train_proper_size is None:
+                raise Exception("For Inductive Venn-ABERS please provide either calibration or proper train set size")
 
         self.classes = np.unique(_y_train)
         self.n_classes = len(self.classes)
@@ -710,8 +719,11 @@ class VennAbersCalibrator:
         # integrity checks
         if not self.inductive and self.n_splits is None:
             raise Exception("For Cross Venn-ABERS please provide n_splits")
-        if self.inductive and self.cal_size is None and self.train_proper_size is None:
-            raise Exception("For Inductive Venn-ABERS please provide either calibration or proper train set size")
+        try:
+            check_is_fitted(self.estimator)
+        except NotFittedError:
+            if self.inductive and self.cal_size is None and self.train_proper_size is None:
+                raise Exception("For Inductive Venn-ABERS please provide either calibration or proper train set size")
 
         self.va_calibrator = VennAbersMultiClass(
             estimator=self.estimator,
@@ -727,7 +739,7 @@ class VennAbersCalibrator:
         self.classes = np.unique(_y_train)
         self.va_calibrator.fit(_x_train, _y_train)
 
-    def predict_proba(self, _x_test=None, p_cal=None, y_cal=None, p_test=None, loss='log'):
+    def predict_proba(self, _x_test=None, p_cal=None, y_cal=None, p_test=None, loss='log', p0_p1_output=False):
         """ Generates Venn-ABERS calibrated probabilities.
 
             Parameters
@@ -748,6 +760,10 @@ class VennAbersCalibrator:
                 Log or Brier loss (for IVAP and CVAP only). For further details of calculation
                 see Section 4 in https://arxiv.org/pdf/1511.00213.pdf
 
+            p0_p1: bool, default = False
+                If True, function also returns p0_p1 probabilistic outputs for binary classification problems
+                (for manual Venn-ABERS only)
+
             Returns
             ----------
             p_prime: {array-like}, shape (n_samples,n_classses)
@@ -765,12 +781,17 @@ class VennAbersCalibrator:
                 raise Exception("Please provide a set of test probabilities to calibrate")
             va = VennAbers()
             va.fit(p_cal, y_cal)
-            p_prime, _ = va.predict_proba(p_test)
+            p_prime, p0_p1 = va.predict_proba(p_test)
         else:
             if _x_test is None:
                 raise Exception("Please provide a feature test set to generate calibrated predictions")
             p_prime = self.va_calibrator.predict_proba(_x_test, loss=loss)
-        return p_prime
+            p0_p1 = None
+
+        if p0_p1_output:
+            return p_prime, p0_p1
+        else:
+            return p_prime
 
     def predict(self, _x_test=None, p_cal=None, y_cal=None, p_test=None, loss='log', one_hot=True):
         """ Generates Venn-ABERS calibrated prediction labels.
