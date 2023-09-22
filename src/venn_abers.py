@@ -49,7 +49,7 @@ def calc_p0p1(p_cal, y_cal):
             c : {array-like}, shape (n_samples, )
                 Ordered set of unique calibration probabilities
             """
-    cal = np.hstack((p_cal[:, 1].reshape(-1, 1), y_cal.reshape(-1, 1)))
+    cal = np.hstack((np.round(p_cal[:, 1], 5).reshape(-1, 1), y_cal.reshape(-1, 1)))
     ix = np.argsort(cal[:, 0])
     k_sort = cal[ix, 0]
     k_label_sort = cal[ix, 1]
@@ -63,7 +63,7 @@ def calc_p0p1(p_cal, y_cal):
     w[-1] = len(k_sort) - ia[-1]
 
     k_dash = len(c)
-    P = np.zeros((k_dash + 2, 2))
+    P = np.zeros((k_dash + 2, 2)).astype(np.float32)
 
     P[0, :] = -1
 
