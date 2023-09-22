@@ -13,7 +13,7 @@ def calc_p0p1(p_cal, y_cal):
             This function relies on the geometric representation of isotonic
             regression as the slope of the GCM (greatest convex minorant) of the CSD
             (cumulative sum diagram) as decribed in [1] pages 9–13 (especially Theorem 1.1).
-            In particular, the funcction implements algorithms 1-4 as described in Chapter 2 in [2]
+            In particular, the function implements algorithms 1-4 as described in Chapter 2 in [2]
 
 
             References
