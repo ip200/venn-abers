@@ -7,7 +7,7 @@ setup(
   name='venn-abers',
   packages=['venn_abers'],
   package_dir={'venn_abers': 'src'},
-  version='1.1',
+  version='1.4',
   license='MIT',
   description='Venn-ABERS calibration package',
   long_description=long_description,
