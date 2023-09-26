@@ -7,7 +7,7 @@ from sklearn.exceptions import NotFittedError
 np.seterr(divide='ignore', invalid='ignore')
 
 
-def calc_p0p1(p_cal, y_cal):
+def calc_p0p1(p_cal, y_cal, precision=None):
     """Function that calculates isotonic calibration vectors required for Venn-ABERS calibration
 
             This function relies on the geometric representation of isotonic
@@ -35,6 +35,11 @@ def calc_p0p1(p_cal, y_cal):
             y_cal : {array-like}, shape (n_samples,)
             Associated binary class labels.
 
+            precision: int, default = None
+            Optional number of decimal points to which Venn-Abers calibration probabilities p_cal are rounded to.
+            Yields significantly faster computation time for larger calibration datasets.
+            If None no rounding is applied.
+
 
             Returns
             ----------
@@ -49,7 +54,10 @@ def calc_p0p1(p_cal, y_cal):
             c : {array-like}, shape (n_samples, )
                 Ordered set of unique calibration probabilities
             """
-    cal = np.hstack((np.round(p_cal[:, 1], 5).reshape(-1, 1), y_cal.reshape(-1, 1)))
+    if precision is not None:
+        cal = np.hstack((np.round(p_cal[:, 1], precision).reshape(-1, 1), y_cal.reshape(-1, 1)))
+    else:
+        cal = np.hstack((p_cal[:, 1].reshape(-1, 1), y_cal.reshape(-1, 1)))
     ix = np.argsort(cal[:, 0])
     k_sort = cal[ix, 0]
     k_label_sort = cal[ix, 1]
@@ -125,11 +133,11 @@ def calc_p0p1(p_cal, y_cal):
 
 
 def calc_probs(p0, p1, c, p_test):
-    """Function that calculates Venn-Abers multibprobability outputs and associated calibrated probabilities
+    """Function that calculates Venn-Abers multiprobability outputs and associated calibrated probabilities
 
 
 
-                In particular, the funcction implements algorithms5-6 as described in Chapter 2 in [1]
+                In particular, the function implements algorithms 5-6 as described in Chapter 2 in [1]
 
 
                 References
@@ -218,7 +226,7 @@ class VennAbers:
         self.p1 = None
         self.c = None
 
-    def fit(self, p_cal, y_cal):
+    def fit(self, p_cal, y_cal, precision=None):
         """Fits the VennAbers calibrator to the calibration dataset
 
 
@@ -229,8 +237,12 @@ class VennAbers:
 
         y_cal : {array-like}, shape (n_samples,)
             Associated binary class labels.
+
+        precision: int, default = None
+            Optional number of decimal points to which Venn-Abers calibration probabilities p_cal are rounded to.
+            Yields significantly faster computation time for larger calibration datasets
         """
-        self.p0, self.p1, self.c = calc_p0p1(p_cal, y_cal)
+        self.p0, self.p1, self.c = calc_p0p1(p_cal, y_cal, precision)
 
     def predict_proba(self, p_test):
         """Generates Venn-Abers probability estimates
@@ -308,6 +320,10 @@ class VennAbersCV:
         stratify : array-like, default=None
             For IVAP only. If not None, data is split in a stratified fashion, using this as
             the class labels.
+
+        precision: int, default = None
+            Optional number of decimal points to which Venn-Abers calibration probabilities p_cal are rounded to.
+            Yields significantly faster computation time for larger calibration datasets
         """
     def __init__(self,
                  estimator,
@@ -317,7 +333,8 @@ class VennAbersCV:
                  train_proper_size=None,
                  random_state=None,
                  shuffle=None,
-                 stratify=None):
+                 stratify=None,
+                 precision=None):
         self.estimator = estimator
         self.n_splits = n_splits
         self.clf_p_cal = []
@@ -328,6 +345,7 @@ class VennAbersCV:
         self.random_state = random_state
         self.shuffle = shuffle
         self.stratify = stratify
+        self.precision = precision
 
     def fit(self, _x_train, _y_train):
         """ Fits the IVAP or CVAP calibrator to the training set.
@@ -390,7 +408,7 @@ class VennAbersCV:
         clf_prob_test = self.estimator.predict_proba(_x_test)
         for i in range(self.n_splits):
             va = VennAbers()
-            va.fit(p_cal=self.clf_p_cal[i], y_cal=self.clf_y_cal[i])
+            va.fit(p_cal=self.clf_p_cal[i], y_cal=self.clf_y_cal[i], precision=self.precision)
             _, probs = va.predict_proba(p_test=clf_prob_test)
             p0p1_test.append(probs)
         p0_stack = np.hstack([prob[:, 0].reshape(-1, 1) for prob in p0p1_test])
@@ -462,6 +480,10 @@ class VennAbersMultiClass:
             For IVAP only. If not None, data is split in a stratified fashion, using this as
             the class labels.
 
+        precision: int, default = None
+            Optional number of decimal points to which Venn-Abers calibration probabilities p_cal are rounded to.
+            Yields significantly faster computation time for larger calibration datasets
+
             """
     def __init__(self,
                  estimator,
@@ -471,7 +493,8 @@ class VennAbersMultiClass:
                  train_proper_size=None,
                  random_state=None,
                  shuffle=None,
-                 stratify=None
+                 stratify=None,
+                 precision=None
                  ):
         self.estimator = estimator
         self.inductive = inductive
@@ -489,6 +512,7 @@ class VennAbersMultiClass:
         self.multiclass_cal = []
         self.multiclass_va_estimators = []
         self.multiclass_probs = []
+        self.precision = precision
 
     def fit(self, _x_train, _y_train):
         """ Fits the Venn-ABERS calibrator to the training set
@@ -531,7 +555,8 @@ class VennAbersMultiClass:
                 train_proper_size=self.train_proper_size,
                 random_state=self.random_state,
                 shuffle=self.shuffle,
-                stratify=self.stratify
+                stratify=self.stratify,
+                precision=self.precision
             )
             va_cv.fit(
                 _x_train[_pairwise_indices],
@@ -634,6 +659,10 @@ class VennAbersCalibrator:
                 For IVAP only. If not None, data is split in a stratified fashion, using this as
                 the class labels.
 
+        precision: int, default = None
+            Optional number of decimal points to which Venn-Abers calibration probabilities p_cal are rounded to.
+            Yields significantly faster computation time for larger calibration datasets
+
         References
         ----------
         [1] Vovk, Vladimir, Ivan Petej, and Valentina Fedorova. "Large-scale probabilistic predictors
@@ -685,8 +714,8 @@ class VennAbersCalibrator:
             train_proper_size=None,
             random_state=None,
             shuffle=True,
-            stratify=None
-
+            stratify=None,
+            precision=None
     ):
         self.estimator = estimator
         self.inductive = inductive
@@ -698,6 +727,7 @@ class VennAbersCalibrator:
         self.stratify = stratify
         self.va_calibrator = None
         self.classes = None
+        self.precision = precision
 
     def fit(self,
             _x_train,
@@ -733,7 +763,8 @@ class VennAbersCalibrator:
             train_proper_size=self.train_proper_size,
             random_state=self.random_state,
             shuffle=self.shuffle,
-            stratify=self.stratify
+            stratify=self.stratify,
+            precision=self.precision
             )
 
         self.classes = np.unique(_y_train)
@@ -760,7 +791,7 @@ class VennAbersCalibrator:
                 Log or Brier loss (for IVAP and CVAP only). For further details of calculation
                 see Section 4 in https://arxiv.org/pdf/1511.00213.pdf
 
-            p0_p1: bool, default = False
+            p0_p1_output: bool, default = False
                 If True, function also returns p0_p1 probabilistic outputs for binary classification problems
                 (for manual Venn-ABERS only)
 
@@ -780,7 +811,7 @@ class VennAbersCalibrator:
             elif p_test is None:
                 raise Exception("Please provide a set of test probabilities to calibrate")
             va = VennAbers()
-            va.fit(p_cal, y_cal)
+            va.fit(p_cal, y_cal, self.precision)
             p_prime, p0_p1 = va.predict_proba(p_test)
         else:
             if _x_test is None:
