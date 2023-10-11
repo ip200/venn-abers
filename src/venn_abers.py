@@ -3,6 +3,7 @@ from sklearn.model_selection import StratifiedKFold, train_test_split
 from sklearn.multiclass import OneVsOneClassifier
 from sklearn.utils.validation import check_is_fitted
 from sklearn.exceptions import NotFittedError
+import pandas as pd
 
 np.seterr(divide='ignore', invalid='ignore')
 
@@ -187,6 +188,32 @@ def calc_probs(p0, p1, c, p_test):
 def geo_mean(a):
     return a.prod(axis=1)**(1.0/a.shape[1])
 
+
+def adjust_categorical_train(_x_train):
+    if isinstance(_x_train, pd.DataFrame):
+        _x_train_df = pd.get_dummies(_x_train)
+    else:
+        _x_train_df = pd.get_dummies(pd.DataFrame(_x_train))
+
+    train_columns = _x_train_df.columns
+
+    return _x_train_df.values, train_columns
+
+def adjust_categorical_test(train_columns, _x_test):
+
+    if isinstance(_x_test, pd.DataFrame):
+        _x_test_df = pd.get_dummies(_x_test)
+    else:
+        _x_test_df = pd.get_dummies(pd.DataFrame(_x_test))
+
+    missing_cols = set(train_columns) - set(_x_test_df.columns)
+
+    for c in missing_cols:
+        _x_test_df[c] = 0
+
+    _x_test_df = _x_test_df[train_columns]
+
+    return _x_test_df.values
 
 class VennAbers:
     """Implementation of the Venn-ABERS calibration for binary classification problems. Venn-ABERS calibration is a
@@ -728,6 +755,7 @@ class VennAbersCalibrator:
         self.va_calibrator = None
         self.classes = None
         self.precision = precision
+        self.train_columns = None
 
     def fit(self,
             _x_train,
@@ -754,6 +782,8 @@ class VennAbersCalibrator:
         except NotFittedError:
             if self.inductive and self.cal_size is None and self.train_proper_size is None:
                 raise Exception("For Inductive Venn-ABERS please provide either calibration or proper train set size")
+
+        _x_train, self.train_columns = adjust_categorical_train(_x_train)
 
         self.va_calibrator = VennAbersMultiClass(
             estimator=self.estimator,
@@ -816,6 +846,9 @@ class VennAbersCalibrator:
         else:
             if _x_test is None:
                 raise Exception("Please provide a feature test set to generate calibrated predictions")
+
+            _x_test = adjust_categorical_test(self.train_columns, _x_test)
+
             p_prime = self.va_calibrator.predict_proba(_x_test, loss=loss)
             p0_p1 = None
 
