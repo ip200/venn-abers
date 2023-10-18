@@ -190,6 +190,7 @@ def geo_mean(a):
 
 
 def adjust_categorical_train(_x_train):
+
     if isinstance(_x_train, pd.DataFrame):
         _x_train_df = pd.get_dummies(_x_train)
     else:
@@ -198,6 +199,7 @@ def adjust_categorical_train(_x_train):
     train_columns = _x_train_df.columns
 
     return _x_train_df.values, train_columns
+
 
 def adjust_categorical_test(train_columns, _x_test):
 
@@ -380,7 +382,7 @@ class VennAbersCV:
         Parameters
         ----------
         _x_train : {array-like}, shape (n_samples,)
-            Input data for calibration consisting of training set features
+            Input data for calibration consisting of training set numerical features
 
         _y_train : {array-like}, shape (n_samples,)
             Associated binary class labels.
@@ -419,7 +421,7 @@ class VennAbersCV:
         Parameters
         ----------
         _x_test : {array-like}, shape (n_samples,)
-            Training set features
+            Training set numerical features
 
         loss : str, default='log'
             Log or Brier loss. For further details of calculation
@@ -547,7 +549,7 @@ class VennAbersMultiClass:
         Parameters
         ----------
         _x_train : {array-like}, shape (n_samples,)
-            Input data for calibration consisting of training set features
+            Input data for calibration consisting of training set numerical features
 
         _y_train : {array-like}, shape (n_samples,)
             Associated binary class labels.
@@ -597,7 +599,7 @@ class VennAbersMultiClass:
             Parameters
             ----------
             _x_test : {array-like}, shape (n_samples,)
-                Training set features
+                Training set numerical features
 
             loss : str, default='log'
                 Log or Brier loss. For further details of calculation
@@ -767,7 +769,8 @@ class VennAbersCalibrator:
             Parameters
             ----------
             _x_train : {array-like}, shape (n_samples,)
-                Input data for calibration consisting of training set features
+                Input data for calibration consisting of training set numerical or categorical features. If categorical,
+                features are one hot encoded using pandas.get_dummies()
 
             _y_train : {array-like}, shape (n_samples,)
                 Associated binary class labels.
@@ -806,7 +809,8 @@ class VennAbersCalibrator:
             Parameters
             ----------
             _x_test : {array-like}, shape (n_samples,)
-                Training set features (only for IVAP and CVAP when underlying classsifier is provided to fit)
+                Training set numerical or cartegorical features (only for IVAP and CVAP when underlying classsifier
+                is provided to fit). If categorical, features are one hot encoded using pandas.get_dummies()
 
             p_cal = {array-like}, shape (n_samples,)
                 Calibration set probabilities  (Manual Venn-ABERS only)
@@ -863,7 +867,8 @@ class VennAbersCalibrator:
                 Parameters
                 ----------
                 _x_test : {array-like}, shape (n_samples,)
-                    Training set features (only for IVAP and CVAP when underlying classsifier is provided to fit)
+                    Training set numerical or vategorical features (only for IVAP and CVAP when underlying classsifier
+                    is provided to fit). If categorical, features are one hot encoded using pandas.get_dummies()
 
                 p_cal = {array-like}, shape (n_samples,)
                     Calibration set probabilities  (Manual Venn-ABERS only)
