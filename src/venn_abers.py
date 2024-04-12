@@ -1,8 +1,10 @@
 import numpy as np
 from sklearn.model_selection import StratifiedKFold, train_test_split
 from sklearn.multiclass import OneVsOneClassifier
-from sklearn.utils.validation import check_is_fitted
+from sklearn.utils.validation import check_is_fitted, check_X_y, check_array
 from sklearn.exceptions import NotFittedError
+from sklearn.base import BaseEstimator, ClassifierMixin
+from sklearn.utils.multiclass import unique_labels
 import pandas as pd
 
 np.seterr(divide='ignore', invalid='ignore')
@@ -217,6 +219,44 @@ def adjust_categorical_test(train_columns, _x_test):
 
     return _x_test_df.values
 
+
+def predict_proba_prefitted_va(p_cal, y_cal, p_test, precision=None):
+    classes = np.unique(y_cal)
+    class_pairs = []
+    for i in range(len(classes) - 1):
+        for j in range(i + 1, len(classes)):
+            class_pairs.append([i, j])
+
+    multiclass_probs = []
+    multiclass_p0p1 = []
+    for i, class_pair in enumerate(class_pairs):
+        pairwise_indices = (y_cal == class_pair[0]) + (y_cal == class_pair[1])
+        binary_cal_probs = p_cal[:, class_pair][pairwise_indices] / np.sum(p_cal[:, class_pair][pairwise_indices],
+                                                                           axis=1).reshape(-1, 1)
+        binary_test_probs = p_test[:, class_pair] / np.sum(p_test[:, class_pair], axis=1).reshape(-1, 1)
+        binary_classes = y_cal[pairwise_indices] == class_pair[1]
+
+        va = VennAbers()
+        va.fit(binary_cal_probs, binary_classes, precision=precision)
+        p_pr, p0_p1 = va.predict_proba(binary_test_probs)
+        multiclass_probs.append(p_pr)
+        multiclass_p0p1.append(p0_p1)
+
+    p_prime = np.zeros((len(p_test), len(classes)))
+
+    for i, cl_id, in enumerate(classes):
+        stack_i = [
+            p[:, 0].reshape(-1, 1) for i, p in enumerate(multiclass_probs) if class_pairs[i][0] == cl_id]
+        stack_j = [
+            p[:, 1].reshape(-1, 1) for i, p in enumerate(multiclass_probs) if class_pairs[i][1] == cl_id]
+        p_stack = stack_i + stack_j
+
+        p_prime[:, i] = 1 / (np.sum(np.hstack([(1 / p) for p in p_stack]), axis=1) - (len(classes) - 2))
+
+    p_prime = p_prime / np.sum(p_prime, axis=1).reshape(-1, 1)
+
+    return p_prime, multiclass_p0p1
+
 class VennAbers:
     """Implementation of the Venn-ABERS calibration for binary classification problems. Venn-ABERS calibration is a
         method of turning machine learning classification algorithms into probabilistic predictors
@@ -331,7 +371,7 @@ class VennAbersCV:
             value is set to the complement of the train size. If ``train_size``
             is also None, it will be set to 0.25.
 
-        train_size : float or int, default=None
+        train_proper_size : float or int, default=None
             For IVAP only, if float, should be between 0.0 and 1.0 and represent the
             proportion of the dataset to include in the poroper training set split. If
             int, represents the absolute number of train samples. If None,
@@ -389,20 +429,16 @@ class VennAbersCV:
         """
         if self.inductive:
             self.n_splits = 1
-            try:
-                check_is_fitted(self.estimator)
-                x_cal, y_cal = _x_train, _y_train
-            except NotFittedError:
-                x_train_proper, x_cal, y_train_proper, y_cal = train_test_split(
-                    _x_train,
-                    _y_train,
-                    test_size=self.cal_size,
-                    train_size=self.train_proper_size,
-                    random_state=self.random_state,
-                    shuffle=self.shuffle,
-                    stratify=self.stratify
-                )
-                self.estimator.fit(x_train_proper, y_train_proper.flatten())
+            x_train_proper, x_cal, y_train_proper, y_cal = train_test_split(
+                _x_train,
+                _y_train,
+                test_size=self.cal_size,
+                train_size=self.train_proper_size,
+                random_state=self.random_state,
+                shuffle=self.shuffle,
+                stratify=self.stratify
+            )
+            self.estimator.fit(x_train_proper, y_train_proper.flatten())
             clf_prob = self.estimator.predict_proba(x_cal)
             self.clf_p_cal.append(clf_prob)
             self.clf_y_cal.append(y_cal)
@@ -809,7 +845,7 @@ class VennAbersCalibrator:
             Parameters
             ----------
             _x_test : {array-like}, shape (n_samples,)
-                Training set numerical or cartegorical features (only for IVAP and CVAP when underlying classsifier
+                Training set numerical or categorical features (only for IVAP and CVAP when underlying classifier
                 is provided to fit). If categorical, features are one hot encoded using pandas.get_dummies()
 
             p_cal = {array-like}, shape (n_samples,)
@@ -831,22 +867,22 @@ class VennAbersCalibrator:
 
             Returns
             ----------
-            p_prime: {array-like}, shape (n_samples,n_classses)
+            p_prime: {array-like}, shape (n_samples, n_classes)
                 Venn-ABERS calibrated probabilities
         """
         if p_cal is None and self.estimator is None:
             raise Exception("Please provide either an underlying algorithm or a calibration set")
         if self.estimator is None:
-            if len(np.unique(y_cal)) > 2:
-                raise Exception("Venn ABERS without an underlying classifier \
-                                currently only available for binary classification problems")
-            elif p_cal is None or y_cal is None:
+            if p_cal is None or y_cal is None:
                 raise Exception("Please provide both a set of calibration probabilities and class labels to calibrate")
             elif p_test is None:
                 raise Exception("Please provide a set of test probabilities to calibrate")
-            va = VennAbers()
-            va.fit(p_cal, y_cal, self.precision)
-            p_prime, p0_p1 = va.predict_proba(p_test)
+            if len(np.unique(y_cal)) <= 2:
+                va = VennAbers()
+                va.fit(p_cal, y_cal, self.precision)
+                p_prime, p0_p1 = va.predict_proba(p_test)
+            else:
+                p_prime, p0_p1 = predict_proba_prefitted_va(p_cal, y_cal, p_test, precision=self.precision)
         else:
             if _x_test is None:
                 raise Exception("Please provide a feature test set to generate calibrated predictions")
@@ -867,7 +903,7 @@ class VennAbersCalibrator:
                 Parameters
                 ----------
                 _x_test : {array-like}, shape (n_samples,)
-                    Training set numerical or vategorical features (only for IVAP and CVAP when underlying classsifier
+                    Training set numerical or categorical features (only for IVAP and CVAP when underlying classsifier
                     is provided to fit). If categorical, features are one hot encoded using pandas.get_dummies()
 
                 p_cal = {array-like}, shape (n_samples,)
