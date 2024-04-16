@@ -870,6 +870,7 @@ class VennAbersCalibrator:
             p_prime: {array-like}, shape (n_samples, n_classes)
                 Venn-ABERS calibrated probabilities
         """
+
         if p_cal is None and self.estimator is None:
             raise Exception("Please provide either an underlying algorithm or a calibration set")
         if self.estimator is None:
@@ -878,10 +879,12 @@ class VennAbersCalibrator:
             elif p_test is None:
                 raise Exception("Please provide a set of test probabilities to calibrate")
             if len(np.unique(y_cal)) <= 2:
+                self.classes = np.unique(y_cal)
                 va = VennAbers()
                 va.fit(p_cal, y_cal, self.precision)
                 p_prime, p0_p1 = va.predict_proba(p_test)
             else:
+                self.classes = np.unique(y_cal)
                 p_prime, p0_p1 = predict_proba_prefitted_va(p_cal, y_cal, p_test, precision=self.precision)
         else:
             if _x_test is None:
