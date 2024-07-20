@@ -489,7 +489,7 @@ class VennAbersCV:
                 self.clf_p_cal.append(clf_prob)
                 self.clf_y_cal.append(_y_train[test_index])
 
-    def predict_proba(self, _x_test, loss='log'):
+    def predict_proba(self, _x_test, loss='log', p0_p1_output=False):
         """ Generates Venn-ABERS calibrated probabilities.
 
 
@@ -502,10 +502,16 @@ class VennAbersCV:
             Log or Brier loss. For further details of calculation
             see Section 4 in https://arxiv.org/pdf/1511.00213.pdf
 
+        p0_p1_output: bool, default = False
+            If True, function also returns p0_p1 binary probabilistic outputs
+
         Returns
         ----------
         p_prime: {array-like}, shape (n_samples,n_classses)
             Venn-ABERS calibrated probabilities
+
+        p0_p1: {array-like}, default  = None
+            Venn-ABERS calibrated p0 and p1 outputs (if p0_p1_output = True)
         """
 
         p0p1_test = []
@@ -527,7 +533,13 @@ class VennAbersCV:
             p_prime[:, 1] = 1 / self.n_splits * (
                     np.sum(p1_stack, axis=1) + 0.5 * np.sum(p0_stack**2, axis=1) - 0.5 * np.sum(p1_stack**2, axis=1))
             p_prime[:, 0] = 1 - p_prime[:, 1]
-        return p_prime
+
+        if p0_p1_output:
+            p0_p1 = np.hstack((p0_stack, p1_stack))
+            return p_prime, p0_p1
+        else:
+            return p_prime
+
 
 
 class VennAbersMultiClass:
@@ -616,6 +628,7 @@ class VennAbersMultiClass:
         self.multiclass_cal = []
         self.multiclass_va_estimators = []
         self.multiclass_probs = []
+        self.multiclass_p0p1 = []
         self.precision = precision
 
     def fit(self, _x_train, _y_train):
@@ -667,7 +680,7 @@ class VennAbersMultiClass:
                 np.array(_y_train[_pairwise_indices] == self.pairwise_id[pair_id][1]).reshape(-1, 1))
             self.multiclass_va_estimators.append(va_cv)
 
-    def predict_proba(self, _x_test, loss='log'):
+    def predict_proba(self, _x_test, loss='log', p0_p1_output=False):
         """ Generates Venn-ABERS calibrated probabilities.
 
 
@@ -680,16 +693,30 @@ class VennAbersMultiClass:
                 Log or Brier loss. For further details of calculation
                 see Section 4 in https://arxiv.org/pdf/1511.00213.pdf
 
+            p0_p1_output: bool, default = False
+            If True, function also returns a set p0_p1 binary probabilistic outputs for each fold
+
             Returns
             ----------
             p_prime: {array-like}, shape (n_samples,n_classses)
                 Venn-ABERS calibrated probabilities
+
+            p0_p1: {array-like}, default  = None
+            Venn-ABERS calibrated p0 and p1 outputs (if p0_p1_output = True)
             """
 
         self.multiclass_probs = []
-        for i, va_estimator in enumerate(self.multiclass_va_estimators):
-            _p_prime = va_estimator.predict_proba(_x_test, loss=loss)
-            self.multiclass_probs.append(_p_prime)
+        self.multiclass_p0p1 = []
+
+        if p0_p1_output:
+            for i, va_estimator in enumerate(self.multiclass_va_estimators):
+                _p_prime, _p0_p1 = va_estimator.predict_proba(_x_test, loss=loss, p0_p1_output=True)
+                self.multiclass_probs.append(_p_prime)
+                self.multiclass_p0p1.append(_p0_p1)
+        else:
+            for i, va_estimator in enumerate(self.multiclass_va_estimators):
+                _p_prime, _p0_p1 = va_estimator.predict_proba(_x_test, loss=loss)
+                self.multiclass_probs.append(_p_prime)
 
         p_prime = np.zeros((len(_x_test), self.n_classes))
 
@@ -704,7 +731,10 @@ class VennAbersMultiClass:
 
         p_prime = p_prime/np.sum(p_prime, axis=1).reshape(-1, 1)
 
-        return p_prime
+        if p0_p1_output:
+            return p_prime, self.multiclass_p0p1
+        else:
+            return p_prime
 
 
 class VennAbersCalibrator:
@@ -910,7 +940,6 @@ class VennAbersCalibrator:
 
             p0_p1_output: bool, default = False
                 If True, function also returns p0_p1 probabilistic outputs for binary classification problems
-                (for pre-fitted calibrator Venn-ABERS only)
 
             va_type: string, default = 'one_vs_one'
                 If one_vs_one then the pre-fitted calibrator Venn-ABERS calibration generates a series of
@@ -920,6 +949,12 @@ class VennAbersCalibrator:
             ----------
             p_prime: {array-like}, shape (n_samples, n_classes)
                 Venn-ABERS calibrated probabilities
+
+            p0_p1: {list}, default  = None
+                Venn-ABERS calibrated p0 and p1 outputs (if p0_p1_output = True). The size of the list
+                corresponds to the number of combinations of one_vs_one or one_vs_all binary problems.
+                Each list is an array of shape (n_samples, n_folds * 2), with the first n_folds entries
+                in each row corresponding to p0 outputs and last n_folds to p1 outputs.
         """
 
         if p_cal is None and self.estimator is None:
@@ -949,8 +984,10 @@ class VennAbersCalibrator:
 
             _x_test = adjust_categorical_test(self.train_columns, _x_test)
 
-            p_prime = self.va_calibrator.predict_proba(_x_test, loss=loss)
-            p0_p1 = None
+            if p0_p1_output:
+                p_prime, p0_p1 = self.va_calibrator.predict_proba(_x_test, loss=loss, p0_p1_output=True)
+            else:
+                p_prime = self.va_calibrator.predict_proba(_x_test, loss=loss)
 
         if p0_p1_output:
             return p_prime, p0_p1
