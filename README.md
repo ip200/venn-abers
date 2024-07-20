@@ -1,5 +1,11 @@
 [![python](https://img.shields.io/badge/Python-3.11-3776AB.svg?style=flat&logo=python&logoColor=white)](https://www.python.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+![Static Badge](https://img.shields.io/badge/Probabilistic_Calibration-blue)
+![GitHub Repo stars](https://img.shields.io/github/stars/ip200/venn-abers)
+
+
+
+
 # Venn-ABERS calibration
 This library contains the Python implementation of Venn-ABERS calibration for binary and multiclass classification problems.
 
@@ -36,9 +42,9 @@ y_pred = va.predict(X_test)
 ### Examples
 Further examples can be found in the github repository https://github.com/ip200/venn-abers in the *examples* folder:
 
-- simple_classification.ipynb for a simple example in the binary classification setting.
-- multiclass_classification.ipynb for the multiclass setting.
-- comparison_with_existing.py for the comparison with a previous github implementation
+- [simple_classification.ipynb](https://github.com/ip200/venn-abers/blob/main/examples/simple_classification.ipynb) for a simple example in the binary classification setting.
+- [multiclass_classification.ipynb](https://github.com/ip200/venn-abers/blob/main/examples/multiclass_classification.ipynb) for the multiclass setting.
+- [comparison_with_existing.ipynb](https://github.com/ip200/venn-abers/blob/main/examples/comparison_with_existing.ipynb) for the comparison with a previous github implementation
 
 ### Citation
 If you find this library useful please consider citing:

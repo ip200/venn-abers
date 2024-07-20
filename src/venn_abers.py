@@ -220,42 +220,81 @@ def adjust_categorical_test(train_columns, _x_test):
     return _x_test_df.values
 
 
-def predict_proba_prefitted_va(p_cal, y_cal, p_test, precision=None):
-    classes = np.unique(y_cal)
-    class_pairs = []
-    for i in range(len(classes) - 1):
-        for j in range(i + 1, len(classes)):
-            class_pairs.append([i, j])
+def predict_proba_prefitted_va(
+        p_cal,
+        y_cal,
+        p_test,
+        precision=None,
+        va_tpe='one_vs_one'
+):
 
-    multiclass_probs = []
-    multiclass_p0p1 = []
-    for i, class_pair in enumerate(class_pairs):
-        pairwise_indices = (y_cal == class_pair[0]) + (y_cal == class_pair[1])
-        binary_cal_probs = p_cal[:, class_pair][pairwise_indices] / np.sum(p_cal[:, class_pair][pairwise_indices],
-                                                                           axis=1).reshape(-1, 1)
-        binary_test_probs = p_test[:, class_pair] / np.sum(p_test[:, class_pair], axis=1).reshape(-1, 1)
-        binary_classes = y_cal[pairwise_indices] == class_pair[1]
+    p_prime = None
+    multiclass_p0p1 = None
 
-        va = VennAbers()
-        va.fit(binary_cal_probs, binary_classes, precision=precision)
-        p_pr, p0_p1 = va.predict_proba(binary_test_probs)
-        multiclass_probs.append(p_pr)
-        multiclass_p0p1.append(p0_p1)
+    if va_tpe == 'one_vs_one':
+        classes = np.unique(y_cal)
+        class_pairs = []
+        for i in range(len(classes) - 1):
+            for j in range(i + 1, len(classes)):
+                class_pairs.append([classes[i], classes[j]])
 
-    p_prime = np.zeros((len(p_test), len(classes)))
+        multiclass_probs = []
+        multiclass_p0p1 = []
+        for i, class_pair in enumerate(class_pairs):
+            pairwise_indices = (y_cal == class_pair[0]) + (y_cal == class_pair[1])
+            binary_cal_probs = p_cal[:, class_pair][pairwise_indices] / np.sum(p_cal[:, class_pair][pairwise_indices],
+                                                                               axis=1).reshape(-1, 1)
+            binary_test_probs = p_test[:, class_pair] / np.sum(p_test[:, class_pair], axis=1).reshape(-1, 1)
+            binary_classes = y_cal[pairwise_indices] == class_pair[1]
 
-    for i, cl_id, in enumerate(classes):
-        stack_i = [
-            p[:, 0].reshape(-1, 1) for i, p in enumerate(multiclass_probs) if class_pairs[i][0] == cl_id]
-        stack_j = [
-            p[:, 1].reshape(-1, 1) for i, p in enumerate(multiclass_probs) if class_pairs[i][1] == cl_id]
-        p_stack = stack_i + stack_j
+            va = VennAbers()
+            va.fit(binary_cal_probs, binary_classes, precision=precision)
+            p_pr, p0_p1 = va.predict_proba(binary_test_probs)
+            multiclass_probs.append(p_pr)
+            multiclass_p0p1.append(p0_p1)
 
-        p_prime[:, i] = 1 / (np.sum(np.hstack([(1 / p) for p in p_stack]), axis=1) - (len(classes) - 2))
+        p_prime = np.zeros((len(p_test), len(classes)))
+
+        for i, cl_id, in enumerate(classes):
+            stack_i = [
+                p[:, 0].reshape(-1, 1) for i, p in enumerate(multiclass_probs) if class_pairs[i][0] == cl_id]
+            stack_j = [
+                p[:, 1].reshape(-1, 1) for i, p in enumerate(multiclass_probs) if class_pairs[i][1] == cl_id]
+            p_stack = stack_i + stack_j
+
+            p_prime[:, i] = 1 / (np.sum(np.hstack([(1 / p) for p in p_stack]), axis=1) - (len(classes) - 2))
+
+    else:
+
+        classes = np.unique(y_cal)
+
+        multiclass_probs = []
+        multiclass_p0p1 = []
+        for _, class_id in enumerate(classes):
+            class_indices = (y_cal == class_id)
+            binary_cal_probs = np.zeros((len(p_cal), 2))
+            binary_test_probs = np.zeros((len(p_test), 2))
+            binary_cal_probs[:, 1] = p_cal[:, class_id]
+            binary_cal_probs[:, 0] = 1 - binary_cal_probs[:, 1]
+            binary_test_probs[:, 1] = p_test[:, class_id]
+            binary_test_probs[:, 0] = 1 - binary_test_probs[:, 1]
+            binary_classes = class_indices
+
+            va = VennAbers()
+            va.fit(binary_cal_probs, binary_classes, precision=precision)
+            p_pr, p0_p1 = va.predict_proba(binary_test_probs)
+            multiclass_probs.append(p_pr)
+            multiclass_p0p1.append(p0_p1)
+
+        p_prime = np.zeros((len(p_test), len(classes)))
+
+        for i, _ in enumerate(classes):
+            p_prime[:, i] = multiclass_probs[i][:, 1]
 
     p_prime = p_prime / np.sum(p_prime, axis=1).reshape(-1, 1)
 
     return p_prime, multiclass_p0p1
+
 
 class VennAbers:
     """Implementation of the Venn-ABERS calibration for binary classification problems. Venn-ABERS calibration is a
@@ -839,7 +878,15 @@ class VennAbersCalibrator:
         self.classes = np.unique(_y_train)
         self.va_calibrator.fit(_x_train, _y_train)
 
-    def predict_proba(self, _x_test=None, p_cal=None, y_cal=None, p_test=None, loss='log', p0_p1_output=False):
+    def predict_proba(
+            self,
+            _x_test=None,
+            p_cal=None,
+            y_cal=None,
+            p_test=None,
+            loss='log',
+            p0_p1_output=False,
+            va_type='one_vs_one'):
         """ Generates Venn-ABERS calibrated probabilities.
 
             Parameters
@@ -863,7 +910,11 @@ class VennAbersCalibrator:
 
             p0_p1_output: bool, default = False
                 If True, function also returns p0_p1 probabilistic outputs for binary classification problems
-                (for manual Venn-ABERS only)
+                (for pre-fitted calibrator Venn-ABERS only)
+
+            va_type: string, default = 'one_vs_one'
+                If one_vs_one then the pre-fitted calibrator Venn-ABERS calibration generates a series of
+                one vs one binary probabilities for calibration, otherwise it is one vs all
 
             Returns
             ----------
@@ -885,7 +936,13 @@ class VennAbersCalibrator:
                 p_prime, p0_p1 = va.predict_proba(p_test)
             else:
                 self.classes = np.unique(y_cal)
-                p_prime, p0_p1 = predict_proba_prefitted_va(p_cal, y_cal, p_test, precision=self.precision)
+                p_prime, p0_p1 = predict_proba_prefitted_va(
+                    p_cal,
+                    y_cal,
+                    p_test,
+                    precision=self.precision,
+                    va_tpe=va_type
+                )
         else:
             if _x_test is None:
                 raise Exception("Please provide a feature test set to generate calibrated predictions")
