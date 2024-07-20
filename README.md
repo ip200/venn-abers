@@ -15,7 +15,7 @@ pip install venn-abers
 ```
 The method can be applied on top of an underlying scikit-learn algorithm.
 ### Example Usage
-```commandline
+```python
 from sklearn.datasets import make_classification
 from sklearn.model_selection import train_test_split
 from sklearn.naive_bayes import GaussianNB
@@ -40,11 +40,12 @@ y_pred = va.predict(X_test)
 
 
 ### Examples
-Further examples can be found in the github repository https://github.com/ip200/venn-abers in the *examples* folder:
+Further examples can be found in the github repository https://github.com/ip200/venn-abers in the `examples` folder:
 
 - [simple_classification.ipynb](https://github.com/ip200/venn-abers/blob/main/examples/simple_classification.ipynb) for a simple example in the binary classification setting.
 - [multiclass_classification.ipynb](https://github.com/ip200/venn-abers/blob/main/examples/multiclass_classification.ipynb) for the multiclass setting.
 - [comparison_with_existing.ipynb](https://github.com/ip200/venn-abers/blob/main/examples/comparison_with_existing.ipynb) for the comparison with a previous github implementation
+
 
 ### Citation
 If you find this library useful please consider citing:
