@@ -7,7 +7,7 @@ setup(
   name='venn-abers',
   packages=['venn_abers'],
   package_dir={'venn_abers': 'src'},
-  version='1.4.4',
+  version='1.4.5',
   license='MIT',
   description='Venn-ABERS calibration package',
   long_description=long_description,
@@ -15,7 +15,7 @@ setup(
   author='Ivan Petej',
   author_email='ivan@algorhythmic.ai',
   url='https://github.com/ip200/venn-abers',
-  download_url='https://github.com/ip200/venn-abers/archive/refs/tags/v1_4_4.tar.gz',
+  download_url='https://github.com/ip200/venn-abers/archive/refs/tags/v1_4_5.tar.gz',
   keywords=['Probabilistic classification', 'calibration'],
   install_requires=[
           'numpy',
