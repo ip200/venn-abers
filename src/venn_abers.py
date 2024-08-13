@@ -715,7 +715,7 @@ class VennAbersMultiClass:
                 self.multiclass_p0p1.append(_p0_p1)
         else:
             for i, va_estimator in enumerate(self.multiclass_va_estimators):
-                _p_prime, _p0_p1 = va_estimator.predict_proba(_x_test, loss=loss)
+                _p_prime = va_estimator.predict_proba(_x_test, loss=loss)
                 self.multiclass_probs.append(_p_prime)
 
         p_prime = np.zeros((len(_x_test), self.n_classes))
