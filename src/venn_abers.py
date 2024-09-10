@@ -74,7 +74,7 @@ def calc_p0p1(p_cal, y_cal, precision=None):
     w[-1] = len(k_sort) - ia[-1]
 
     k_dash = len(c)
-    P = np.zeros((k_dash + 2, 2)).astype(np.float32)
+    P = np.zeros((k_dash + 2, 2))
 
     P[0, :] = -1
 
