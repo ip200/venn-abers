@@ -80,29 +80,20 @@ def calc_p0p1(p_cal, y_cal, precision=None, setting='classification'):
     w[-1] = len(k_sort) - ia[-1]
 
     k_dash = len(c)
-    P = np.zeros((k_dash + 2, 2))
 
     if setting == 'classification':
+        P = np.zeros((k_dash + 2, 2))
+
         P[0, 0] = -1
-    else:
-        P[0, :] = - 1
-        P[0, 1] = - np.max(k_label_sort)
+        P[2:, 0] = np.cumsum(w)
+        P[2:-1, 1] = np.cumsum(k_label_sort)[(ia - 1)[1:]]
+        P[-1, 1] = np.cumsum(k_label_sort)[-1]
 
-    P[2:, 0] = np.cumsum(w)
-    P[2:-1, 1] = np.cumsum(k_label_sort)[(ia - 1)[1:]]
-    P[-1, 1] = np.cumsum(k_label_sort)[-1]
+        p1 = np.zeros((len(c) + 1, 2))
+        p1[1:, 0] = c
 
-    p1 = np.zeros((len(c) + 1, 2))
-    p1[1:, 0] = c
-
-    if setting == 'classification':
         P1 = P[1:] + 1
-    else:
-        P1 = P[1:]
-        P1[:, 0] += 1
-        P1[:, 1] += np.max(k_label_sort)
 
-    if setting == 'classification':
         for i in range(len(p1)):
 
             P1[i, :] = P1[i, :] - 1
@@ -123,9 +114,52 @@ def calc_p0p1(p_cal, y_cal, precision=None, setting='classification'):
                     p1[i, 1] = grad
                 else:
                     p1[i, 1] = grad
+
+        p0 = np.zeros((len(c) + 1, 2))
+        p0[1:, 0] = c
+
+        P0 = P[1:]
+
+        for i in range(len(p1) - 1, -1, -1):
+            P0[i, 0] = P0[i, 0] + 1
+
+            if i == len(p1) - 1:
+                grads = np.divide((P0[:, 1] - P0[i, 1]), (P0[:, 0] - P0[i, 0]))
+                grad = np.nanmax(grads)
+                p0[i, 1] = grad
+                c_point = i
+            else:
+                imp_point = P0[c_point, 1] + (P0[i, 0] - P0[c_point, 0]) * grad
+
+                if P0[i, 1] < imp_point:
+                    grads = np.divide((P0[:, 1] - P0[i, 1]), (P0[:, 0] - P0[i, 0]))
+                    grads[i:] = 0
+                    grad = np.nanmax(grads)
+                    c_point = i
+                    p0[i, 1] = grad
+                else:
+                    p0[i, 1] = grad
     else:
 
-        for i in range(len(p1)):
+        y_dash = np.cumsum(k_label_sort)[ia-1][1:] / ia[1:]
+
+        P = np.zeros((k_dash + 2, 2))
+        P[0, 0] = - 1
+        P[0, 1] = - np.max(k_label_sort)
+
+        P[2:, 0] = np.cumsum(w)
+        P[2:-1, 1] = np.cumsum(k_label_sort)[(ia - 1)[1:]]
+        P[-1, 1] = np.cumsum(k_label_sort)[-1]
+
+        p1 = np.zeros((len(c) + 1, 2))
+        p1[0, 0] = np.min(c)
+        p1[1:, 0] = c
+
+        P1 = P[1:]
+        P1[:, 0] += 1
+        P1[:, 1] += np.max(k_label_sort)
+
+        for i in range(0, len(p1)):
 
             P1[i, 0] = P1[i, 0] - 1
             P1[i, 1] = P1[i, 1] - np.max(k_label_sort)
@@ -147,30 +181,37 @@ def calc_p0p1(p_cal, y_cal, precision=None, setting='classification'):
                 else:
                     p1[i, 1] = grad
 
-    p0 = np.zeros((len(c) + 1, 2))
-    p0[1:, 0] = c
+        p0 = np.zeros((len(c) + 1, 2))
+        p0[:-1, 0] = c
+        p0[-1, 0] = np.max(c)
 
-    P0 = P[1:]
+        P = np.zeros((k_dash + 2, 2))
+        P[1:-1, 0] = np.cumsum(w)
+        # P[1:-1, 1] = np.cumsum(k_label_sort[ia])
+        P[1:-1, 1] = np.hstack((np.cumsum(k_label_sort)[ia[1:]-1], np.cumsum(k_label_sort)[-1]))
+        P[-1, :] = P[-2, :]
+        P[-1, 0] += 1
+        P0 = P.copy()
 
-    for i in range(len(p1) - 1, -1, -1):
-        P0[i, 0] = P0[i, 0] + 1
-
-        if i == len(p1) - 1:
-            grads = np.divide((P0[:, 1] - P0[i, 1]), (P0[:, 0] - P0[i, 0]))
-            grad = np.nanmax(grads)
-            p0[i, 1] = grad
-            c_point = i
-        else:
-            imp_point = P0[c_point, 1] + (P0[i, 0] - P0[c_point, 0]) * grad
-
-            if P0[i, 1] < imp_point:
+        for i in range(len(p0), 0, -1):
+            if i == len(p0):
+                P0[i, 1] = P0[i, 1] + np.min(k_label_sort)
                 grads = np.divide((P0[:, 1] - P0[i, 1]), (P0[:, 0] - P0[i, 0]))
-                grads[i:] = 0
                 grad = np.nanmax(grads)
+                p0[i-1, 1] = grad
                 c_point = i
-                p0[i, 1] = grad
             else:
-                p0[i, 1] = grad
+                P0[i, 1] = P[i, 1] + np.min(k_label_sort) - k_label_sort[ia][i-1]
+                imp_point = P0[c_point, 1] + (P0[i, 0] - P0[c_point, 0]) * grad
+                if P0[i, 1] < imp_point:
+                    grads = np.divide((P0[:, 1] - P0[i, 1]), (P0[:, 0] - P0[i, 0]))
+                    grads[i:] = np.nan
+                    grad = np.nanmax(grads)
+                    c_point = i
+                    p0[i-1, 1] = grad
+                else:
+                    p0[i-1, 1] = grad
+
     return p0, p1, c
 
 
@@ -553,7 +594,7 @@ class VennAbersCV:
                     self.m_parameter = int(np.round(self.epsilon * (len(y_cal) + 1) / 2))
                 else:
                     self.epsilon = 2 * self.m_parameter / (len(y_cal) + 1)
-                ordered_labels = np.sort(y_cal)
+                ordered_labels = np.sort(y_cal.flatten())
                 y_star_lower = ordered_labels[self.m_parameter - 1]
                 y_star_upper = ordered_labels[len(ordered_labels) - self.m_parameter]
                 y_starred = y_cal
@@ -1314,9 +1355,9 @@ class VennAberRegressor:
             lower = np.array([i[:, 0] for i in intervals_range]).T
             upper = np.array([i[:, 1] for i in intervals_range]).T
         if return_folds:
-            return mid, np.vstack((lower, upper)).T, folds
+            return mid, np.hstack((lower, upper)), folds
         else:
-            return mid, np.vstack((lower, upper)).T
+            return mid, np.hstack((lower, upper))
 
 
 
