@@ -471,6 +471,9 @@ class VennAbersCV:
         """
         if self.inductive:
             self.n_splits = 1
+            estimator = self.estimator
+            estimator.fit(_x_train, _y_train.flatten())
+            self.estimators.append(estimator)
             x_train_proper, x_cal, y_train_proper, y_cal = train_test_split(
                 _x_train,
                 _y_train,
@@ -480,7 +483,9 @@ class VennAbersCV:
                 shuffle=self.shuffle,
                 stratify=self.stratify
             )
-            self.estimator.fit(x_train_proper, y_train_proper.flatten())
+            estimator = self.estimator
+            estimator.fit(x_train_proper, y_train_proper.flatten())
+            self.estimators.append(estimator)
             clf_prob = self.estimator.predict_proba(x_cal)
             self.clf_p_cal.append(clf_prob)
             self.clf_y_cal.append(y_cal)
@@ -607,6 +612,10 @@ class VennAbersMultiClass:
         precision: int, default = None
             Optional number of decimal points to which Venn-Abers calibration probabilities p_cal are rounded to.
             Yields significantly faster computation time for larger calibration datasets
+
+        cv_ensemble: bool, default = True
+            If False then the predictions for the test set are generated using the underlying classifier trained
+            on the whole training set, instead of on the split (in the case of IVAP) or folds (in the case of CVAP)
 
             """
     def __init__(self,
@@ -807,6 +816,12 @@ class VennAbersCalibrator:
         precision: int, default = None
             Optional number of decimal points to which Venn-Abers calibration probabilities p_cal are rounded to.
             Yields significantly faster computation time for larger calibration datasets
+
+        cv_ensemble: bool, default = True
+            If False then the predictions for the test set are generated using the underlying classifier trained
+            on the whole training set, instead of on the split (in the case of IVAP) or folds (in the case of CVAP)
+
+
 
         References
         ----------
