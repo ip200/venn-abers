@@ -521,7 +521,7 @@ class VennAbersCV:
             before splitting into batches
 
         stratify : array-like, default=None
-            For IVAP only. If not None, data is split in a stratified fashion, using this as
+            For IVAP classification only. If not None, data is split in a stratified fashion, using this as
             the class labels.
 
         precision: int, default = None
@@ -547,13 +547,17 @@ class VennAbersCV:
                  precision=None,
                  setting='classification',
                  epsilon=None,
-                 m_parameter=None):
+                 m_parameter=1,
+                 cv_ensemble=True):
+
         self.estimator = estimator
         self.n_splits = n_splits
         self.clf_p_cal = []
         self.clf_y_cal = []
         self.y_stars_lower = []
         self.y_stars_upper = []
+        self.estimators = []
+        self.cv_ensemble = cv_ensemble
         self.inductive = inductive
         self.cal_size = cal_size
         self.train_proper_size = train_proper_size
@@ -564,6 +568,7 @@ class VennAbersCV:
         self.setting = setting
         self.epsilon = epsilon
         self.m_parameter = m_parameter
+
 
     def fit(self, _x_train, _y_train):
         """ Fits the IVAP or CVAP calibrator to the training set.
@@ -578,6 +583,9 @@ class VennAbersCV:
         """
         if self.inductive:
             self.n_splits = 1
+            estimator = self.estimator
+            estimator.fit(_x_train, _y_train.flatten())
+            self.estimators.append(estimator)
             x_train_proper, x_cal, y_train_proper, y_cal = train_test_split(
                 _x_train,
                 _y_train,
@@ -587,8 +595,9 @@ class VennAbersCV:
                 shuffle=self.shuffle,
                 stratify=self.stratify
             )
-
-            self.estimator.fit(x_train_proper, y_train_proper.flatten() if y_train_proper.ndim > 1 else y_train_proper)
+            estimator = self.estimator
+            estimator.fit(x_train_proper, y_train_proper.flatten() if y_train_proper.ndim > 1 else y_train_proper)
+            self.estimators.append(estimator)
             if self.setting == 'regression':
                 if self.epsilon:
                     self.m_parameter = int(np.round(self.epsilon * (len(y_cal) + 1) / 2))
@@ -615,8 +624,14 @@ class VennAbersCV:
                 kf = StratifiedKFold(n_splits=self.n_splits, shuffle=self.shuffle, random_state=self.random_state)
             else:
                 kf = KFold(n_splits=self.n_splits, shuffle=self.shuffle, random_state=self.random_state)
+
+            estimator = self.estimator
+            estimator.fit(_x_train, _y_train.flatten())
+            self.estimators.append(estimator)
             for train_index, test_index in kf.split(_x_train, _y_train):
-                self.estimator.fit(_x_train[train_index], _y_train[train_index].flatten())
+                estimator = self.estimator
+                estimator.fit(_x_train[train_index], _y_train[train_index].flatten())
+                self.estimators.append(estimator)
                 if self.setting == 'classification':
                     clf_score = self.estimator.predict_proba(_x_train[test_index])
                     self.clf_y_cal.append(_y_train[test_index])
@@ -632,6 +647,19 @@ class VennAbersCV:
                     self.y_stars_lower.append(y_star_lower)
                     self.y_stars_upper.append(y_star_upper)
                 self.clf_p_cal.append(clf_score)
+
+            # kf = StratifiedKFold(n_splits=self.n_splits, shuffle=self.shuffle, random_state=self.random_state)
+            # estimator = self.estimator
+            # estimator.fit(_x_train, _y_train)
+            # self.estimators.append(estimator)
+            # for train_index, test_index in kf.split(_x_train, _y_train):
+            #     estimator = self.estimator
+            #     estimator.fit(_x_train[train_index], _y_train[train_index].flatten())
+            #     clf_score = self.estimator.predict_proba(_x_train[test_index])
+            #     self.clf_y_cal.append(_y_train[test_index])
+            #     self.clf_p_cal.append(clf_score)
+            #     self.estimators.append(estimator)
+
 
     def predict_proba(self, _x_test, loss='log', p0_p1_output=False):
         """ Generates Venn-ABERS calibrated probabilities.
@@ -659,10 +687,11 @@ class VennAbersCV:
         """
 
         p0p1_test = []
-        clf_prob_test = self.estimator.predict_proba(_x_test)
         for i in range(self.n_splits):
             va = VennAbers()
             va.fit(p_cal=self.clf_p_cal[i], y_cal=self.clf_y_cal[i], precision=self.precision)
+            clf_prob_test = self.estimators[0].predict_proba(_x_test) if self.cv_ensemble is False else \
+                self.estimators[i + 1].predict_proba(_x_test)
             _, probs = va.predict_proba(p_test=clf_prob_test)
             p0p1_test.append(probs)
         p0_stack = np.hstack([prob[:, 0].reshape(-1, 1) for prob in p0p1_test])
@@ -724,7 +753,6 @@ class VennAbersCV:
             intervals_mid.append(mid_1 + mid_2)
 
         return intervals_mid, intervals_range
-
 
 class VennAbersMultiClass:
     """Inductive (IVAP) or Cross (CVAP) Venn-ABERS prediction method for multi-class classification problems
@@ -794,7 +822,8 @@ class VennAbersMultiClass:
                  random_state=None,
                  shuffle=None,
                  stratify=None,
-                 precision=None
+                 precision=None,
+                 cv_ensemble=True
                  ):
         self.estimator = estimator
         self.inductive = inductive
@@ -814,6 +843,7 @@ class VennAbersMultiClass:
         self.multiclass_probs = []
         self.multiclass_p0p1 = []
         self.precision = precision
+        self.cv_ensemble = cv_ensemble
 
     def fit(self, _x_train, _y_train):
         """ Fits the Venn-ABERS calibrator to the training set
@@ -857,7 +887,8 @@ class VennAbersMultiClass:
                 random_state=self.random_state,
                 shuffle=self.shuffle,
                 stratify=self.stratify,
-                precision=self.precision
+                precision=self.precision,
+                cv_ensemble=self.cv_ensemble
             )
             va_cv.fit(
                 _x_train[_pairwise_indices],
@@ -1033,7 +1064,8 @@ class VennAbersCalibrator:
             random_state=None,
             shuffle=True,
             stratify=None,
-            precision=None
+            precision=None,
+            cv_ensemble=True
     ):
         self.estimator = estimator
         self.inductive = inductive
@@ -1047,6 +1079,7 @@ class VennAbersCalibrator:
         self.classes = None
         self.precision = precision
         self.train_columns = None
+        self.cv_ensemble = cv_ensemble
 
     def fit(self,
             _x_train,
@@ -1086,7 +1119,8 @@ class VennAbersCalibrator:
             random_state=self.random_state,
             shuffle=self.shuffle,
             stratify=self.stratify,
-            precision=self.precision
+            precision=self.precision,
+            cv_ensemble=self.cv_ensemble
             )
 
         self.classes = np.unique(_y_train)
@@ -1358,12 +1392,3 @@ class VennAberRegressor:
             return mid, np.hstack((lower, upper)), folds
         else:
             return mid, np.hstack((lower, upper))
-
-
-
-
-
-
-
-
-
