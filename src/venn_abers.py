@@ -1,5 +1,5 @@
 import numpy as np
-from sklearn.model_selection import StratifiedKFold, train_test_split
+from sklearn.model_selection import StratifiedKFold, train_test_split, KFold
 from sklearn.multiclass import OneVsOneClassifier
 from sklearn.utils.validation import check_is_fitted, check_X_y, check_array
 from sklearn.exceptions import NotFittedError
@@ -10,7 +10,7 @@ import pandas as pd
 np.seterr(divide='ignore', invalid='ignore')
 
 
-def calc_p0p1(p_cal, y_cal, precision=None):
+def calc_p0p1(p_cal, y_cal, precision=None, setting='classification'):
     """Function that calculates isotonic calibration vectors required for Venn-ABERS calibration
 
             This function relies on the geometric representation of isotonic
@@ -43,6 +43,8 @@ def calc_p0p1(p_cal, y_cal, precision=None):
             Yields significantly faster computation time for larger calibration datasets.
             If None no rounding is applied.
 
+            setting : str, default = classification
+            Optional parameter indicating a classification or regression setting
 
             Returns
             ----------
@@ -57,10 +59,14 @@ def calc_p0p1(p_cal, y_cal, precision=None):
             c : {array-like}, shape (n_samples, )
                 Ordered set of unique calibration probabilities
             """
-    if precision is not None:
-        cal = np.hstack((np.round(p_cal[:, 1], precision).reshape(-1, 1), y_cal.reshape(-1, 1)))
+    if setting == 'classification':
+        if precision is not None:
+            cal = np.hstack((np.round(p_cal[:, 1], precision).reshape(-1, 1), y_cal.reshape(-1, 1)))
+        else:
+            cal = np.hstack((p_cal[:, 1].reshape(-1, 1), y_cal.reshape(-1, 1)))
     else:
-        cal = np.hstack((p_cal[:, 1].reshape(-1, 1), y_cal.reshape(-1, 1)))
+        cal = np.hstack((p_cal.reshape(-1, 1), y_cal.reshape(-1, 1)))
+
     ix = np.argsort(cal[:, 0])
     k_sort = cal[ix, 0]
     k_label_sort = cal[ix, 1]
@@ -74,68 +80,141 @@ def calc_p0p1(p_cal, y_cal, precision=None):
     w[-1] = len(k_sort) - ia[-1]
 
     k_dash = len(c)
-    P = np.zeros((k_dash + 2, 2))
 
-    P[0, :] = -1
+    if setting == 'classification':
+        P = np.zeros((k_dash + 2, 2))
 
-    P[2:, 0] = np.cumsum(w)
-    P[2:-1, 1] = np.cumsum(k_label_sort)[(ia - 1)[1:]]
-    P[-1, 1] = np.cumsum(k_label_sort)[-1]
+        P[0, 0] = -1
+        P[2:, 0] = np.cumsum(w)
+        P[2:-1, 1] = np.cumsum(k_label_sort)[(ia - 1)[1:]]
+        P[-1, 1] = np.cumsum(k_label_sort)[-1]
 
-    p1 = np.zeros((len(c) + 1, 2))
-    p1[1:, 0] = c
+        p1 = np.zeros((len(c) + 1, 2))
+        p1[1:, 0] = c
 
-    P1 = P[1:] + 1
+        P1 = P[1:] + 1
 
-    for i in range(len(p1)):
+        for i in range(len(p1)):
 
-        P1[i, :] = P1[i, :] - 1
+            P1[i, :] = P1[i, :] - 1
 
-        if i == 0:
-            grads = np.divide(P1[:, 1], P1[:, 0])
-            grad = np.nanmin(grads)
-            p1[i, 1] = grad
-            c_point = 0
-        else:
-            imp_point = P1[c_point, 1] + (P1[i, 0] - P1[c_point, 0]) * grad
-
-            if P1[i, 1] < imp_point:
-                grads = np.divide((P1[i:, 1] - P1[i, 1]), (P1[i:, 0] - P1[i, 0]))
-                if np.sum(np.isnan(np.nanmin(grads))) == 0:
-                    grad = np.nanmin(grads)
-                c_point = i
+            if i == 0:
+                grads = np.divide(P1[:, 1], P1[:, 0])
+                grad = np.nanmin(grads)
                 p1[i, 1] = grad
+                c_point = 0
             else:
-                p1[i, 1] = grad
+                imp_point = P1[c_point, 1] + (P1[i, 0] - P1[c_point, 0]) * grad
 
-    p0 = np.zeros((len(c) + 1, 2))
-    p0[1:, 0] = c
+                if P1[i, 1] < imp_point:
+                    grads = np.divide((P1[i:, 1] - P1[i, 1]), (P1[i:, 0] - P1[i, 0]))
+                    if np.sum(np.isnan(np.nanmin(grads))) == 0:
+                        grad = np.nanmin(grads)
+                    c_point = i
+                    p1[i, 1] = grad
+                else:
+                    p1[i, 1] = grad
 
-    P0 = P[1:]
+        p0 = np.zeros((len(c) + 1, 2))
+        p0[1:, 0] = c
 
-    for i in range(len(p1) - 1, -1, -1):
-        P0[i, 0] = P0[i, 0] + 1
+        P0 = P[1:]
 
-        if i == len(p1) - 1:
-            grads = np.divide((P0[:, 1] - P0[i, 1]), (P0[:, 0] - P0[i, 0]))
-            grad = np.nanmax(grads)
-            p0[i, 1] = grad
-            c_point = i
-        else:
-            imp_point = P0[c_point, 1] + (P0[i, 0] - P0[c_point, 0]) * grad
+        for i in range(len(p1) - 1, -1, -1):
+            P0[i, 0] = P0[i, 0] + 1
 
-            if P0[i, 1] < imp_point:
+            if i == len(p1) - 1:
                 grads = np.divide((P0[:, 1] - P0[i, 1]), (P0[:, 0] - P0[i, 0]))
-                grads[i:] = 0
                 grad = np.nanmax(grads)
+                p0[i, 1] = grad
                 c_point = i
-                p0[i, 1] = grad
             else:
-                p0[i, 1] = grad
+                imp_point = P0[c_point, 1] + (P0[i, 0] - P0[c_point, 0]) * grad
+
+                if P0[i, 1] < imp_point:
+                    grads = np.divide((P0[:, 1] - P0[i, 1]), (P0[:, 0] - P0[i, 0]))
+                    grads[i:] = 0
+                    grad = np.nanmax(grads)
+                    c_point = i
+                    p0[i, 1] = grad
+                else:
+                    p0[i, 1] = grad
+    else:
+
+        y_dash = np.cumsum(k_label_sort)[ia-1][1:] / ia[1:]
+
+        P = np.zeros((k_dash + 2, 2))
+        P[0, 0] = - 1
+        P[0, 1] = - np.max(k_label_sort)
+
+        P[2:, 0] = np.cumsum(w)
+        P[2:-1, 1] = np.cumsum(k_label_sort)[(ia - 1)[1:]]
+        P[-1, 1] = np.cumsum(k_label_sort)[-1]
+
+        p1 = np.zeros((len(c) + 1, 2))
+        p1[0, 0] = np.min(c)
+        p1[1:, 0] = c
+
+        P1 = P[1:]
+        P1[:, 0] += 1
+        P1[:, 1] += np.max(k_label_sort)
+
+        for i in range(0, len(p1)):
+
+            P1[i, 0] = P1[i, 0] - 1
+            P1[i, 1] = P1[i, 1] - np.max(k_label_sort)
+
+            if i == 0:
+                grads = np.divide(P1[:, 1], P1[:, 0])
+                grad = np.nanmin(grads)
+                p1[i, 1] = grad
+                c_point = 0
+            else:
+                imp_point = P1[c_point, 1] + (P1[i, 0] - P1[c_point, 0]) * grad
+
+                if P1[i, 1] < imp_point:
+                    grads = np.divide((P1[i:, 1] - P1[i, 1]), (P1[i:, 0] - P1[i, 0]))
+                    if np.sum(np.isnan(np.nanmin(grads))) == 0:
+                        grad = np.nanmin(grads)
+                    c_point = i
+                    p1[i, 1] = grad
+                else:
+                    p1[i, 1] = grad
+
+        p0 = np.zeros((len(c) + 1, 2))
+        p0[:-1, 0] = c
+        p0[-1, 0] = np.max(c)
+
+        P = np.zeros((k_dash + 2, 2))
+        P[1:-1, 0] = np.cumsum(w)
+        P[1:-1, 1] = np.hstack((np.cumsum(k_label_sort)[ia[1:]-1], np.cumsum(k_label_sort)[-1]))
+        P[-1, :] = P[-2, :]
+        P[-1, 0] += 1
+        P0 = P.copy()
+
+        for i in range(len(p0), 0, -1):
+            if i == len(p0):
+                P0[i, 1] = P0[i, 1] + np.min(k_label_sort)
+                grads = np.divide((P0[:, 1] - P0[i, 1]), (P0[:, 0] - P0[i, 0]))
+                grad = np.nanmax(grads)
+                p0[i-1, 1] = grad
+                c_point = i
+            else:
+                P0[i, 1] = P[i, 1] + np.min(k_label_sort) - k_label_sort[ia][i-1]
+                imp_point = P0[c_point, 1] + (P0[i, 0] - P0[c_point, 0]) * grad
+                if P0[i, 1] < imp_point:
+                    grads = np.divide((P0[:, 1] - P0[i, 1]), (P0[:, 0] - P0[i, 0]))
+                    grads[i:] = np.nan
+                    grad = np.nanmax(grads)
+                    c_point = i
+                    p0[i-1, 1] = grad
+                else:
+                    p0[i-1, 1] = grad
+
     return p0, p1, c
 
 
-def calc_probs(p0, p1, c, p_test):
+def calc_probs(p0, p1, c, p_test, setting='classification'):
     """Function that calculates Venn-Abers multiprobability outputs and associated calibrated probabilities
 
 
@@ -166,6 +245,8 @@ def calc_probs(p0, p1, c, p_test):
                 p_test : {array-like}, shape (n_samples, 2)
                     An array of probability outputs which are to be calibrated
 
+                setting : str, default = classification
+                Optional parameter indicating a classification or regression setting
 
                 Returns
                 ----------
@@ -176,13 +257,20 @@ def calc_probs(p0, p1, c, p_test):
                 Associated multiprobability outputs
                 (as described in Section 4 in https://arxiv.org/pdf/1511.00213.pdf)
                 """
-    out = p_test[:, 1]
+
+    if setting == 'classification':
+        out = p_test[:, 1]
+    else:
+        out = p_test
+
     p0_p1 = np.hstack(
         (p0[np.searchsorted(c, out, 'right'), 1].reshape(-1, 1), p1[np.searchsorted(c, out, 'left'), 1].reshape(-1, 1)))
 
     p_prime = np.zeros((len(out), 2))
-    p_prime[:, 1] = p0_p1[:, 1] / (1 - p0_p1[:, 0] + p0_p1[:, 1])
-    p_prime[:, 0] = 1 - p_prime[:, 1]
+
+    if setting == 'classification':
+        p_prime[:, 1] = p0_p1[:, 1] / (1 - p0_p1[:, 0] + p0_p1[:, 1])
+        p_prime[:, 0] = 1 - p_prime[:, 1]
 
     return p_prime, p0_p1
 
@@ -302,6 +390,11 @@ class VennAbers:
         that automatically enjoys a property of validity (perfect calibration) and is computationally efficient.
         The algorithm is described in [1].
 
+        Parameters
+        ----------
+        setting : str, default = classification
+            Optional parameter indicating a classification or regression setting
+
 
         References
         ----------
@@ -329,10 +422,11 @@ class VennAbers:
         >>> va.fit(p_cal, y_cal)
         >>> p_prime, p0_p1 = va.predict_proba(p_test)
         """
-    def __init__(self):
+    def __init__(self, setting='classification'):
         self.p0 = None
         self.p1 = None
         self.c = None
+        self.setting = setting
 
     def fit(self, p_cal, y_cal, precision=None):
         """Fits the VennAbers calibrator to the calibration dataset
@@ -350,7 +444,7 @@ class VennAbers:
             Optional number of decimal points to which Venn-Abers calibration probabilities p_cal are rounded to.
             Yields significantly faster computation time for larger calibration datasets
         """
-        self.p0, self.p1, self.c = calc_p0p1(p_cal, y_cal, precision)
+        self.p0, self.p1, self.c = calc_p0p1(p_cal, y_cal, precision, setting=self.setting)
 
     def predict_proba(self, p_test):
         """Generates Venn-Abers probability estimates
@@ -371,7 +465,7 @@ class VennAbers:
             Associated multiprobability outputs
             (as described in Section 4 in https://arxiv.org/pdf/1511.00213.pdf)
         """
-        p_prime, p0_p1 = calc_probs(self.p0, self.p1, self.c, p_test)
+        p_prime, p0_p1 = calc_probs(self.p0, self.p1, self.c, p_test, setting=self.setting)
         return p_prime, p0_p1
 
 
@@ -426,12 +520,25 @@ class VennAbersCV:
             before splitting into batches
 
         stratify : array-like, default=None
-            For IVAP only. If not None, data is split in a stratified fashion, using this as
+            For IVAP classification only. If not None, data is split in a stratified fashion, using this as
             the class labels.
 
         precision: int, default = None
             Optional number of decimal points to which Venn-Abers calibration probabilities p_cal are rounded to.
             Yields significantly faster computation time for larger calibration datasets
+
+        setting : str, default = classification
+            Optional parameter indicating a classification or regression setting
+
+        cv_ensemble : bool, default = True
+            For CVAP and CVAR only, if set to True the predictions are generated by each fold separately
+
+        epsilon: float, default = None
+            Optional sensitivity parameter (only relevant where setting='regression')
+
+        m_parameter int, default = 1
+            Optional regression bounding parameter (only relevant where setting='regression')
+
         """
     def __init__(self,
                  estimator,
@@ -443,12 +550,19 @@ class VennAbersCV:
                  shuffle=None,
                  stratify=None,
                  precision=None,
-                 cv_ensemble=True):
+                 setting='classification',
+                 cv_ensemble=True,
+                 epsilon=None,
+                 m_parameter=1):
+
         self.estimator = estimator
         self.n_splits = n_splits
         self.clf_p_cal = []
         self.clf_y_cal = []
+        self.y_stars_lower = []
+        self.y_stars_upper = []
         self.estimators = []
+        self.cv_ensemble = cv_ensemble
         self.inductive = inductive
         self.cal_size = cal_size
         self.train_proper_size = train_proper_size
@@ -456,7 +570,9 @@ class VennAbersCV:
         self.shuffle = shuffle
         self.stratify = stratify
         self.precision = precision
-        self.cv_ensemble = cv_ensemble
+        self.setting = setting
+        self.epsilon = epsilon
+        self.m_parameter = m_parameter
 
     def fit(self, _x_train, _y_train):
         """ Fits the IVAP or CVAP calibrator to the training set.
@@ -484,23 +600,57 @@ class VennAbersCV:
                 stratify=self.stratify
             )
             estimator = self.estimator
-            estimator.fit(x_train_proper, y_train_proper.flatten())
+            estimator.fit(x_train_proper, y_train_proper.flatten() if y_train_proper.ndim > 1 else y_train_proper)
             self.estimators.append(estimator)
-            clf_prob = self.estimator.predict_proba(x_cal)
-            self.clf_p_cal.append(clf_prob)
-            self.clf_y_cal.append(y_cal)
+            if self.setting == 'regression':
+                if self.epsilon:
+                    self.m_parameter = int(np.round(self.epsilon * (len(y_cal) + 1) / 2))
+                else:
+                    self.epsilon = 2 * self.m_parameter / (len(y_cal) + 1)
+                ordered_labels = np.sort(y_cal.flatten())
+                y_star_lower = ordered_labels[self.m_parameter - 1]
+                y_star_upper = ordered_labels[len(ordered_labels) - self.m_parameter]
+                y_starred = y_cal
+                y_starred[y_cal < y_star_lower] = y_star_lower
+                y_starred[y_cal > y_star_upper] = y_star_upper
+                self.clf_y_cal.append(y_starred)
+                self.y_stars_lower.append(y_star_lower)
+                self.y_stars_upper.append(y_star_upper)
+            if self.setting == 'classification':
+                clf_score = self.estimator.predict_proba(x_cal)
+                self.clf_y_cal.append(y_cal)
+            else:
+                clf_score = self.estimator.predict(x_cal)
+            self.clf_p_cal.append(clf_score)
+
         else:
-            kf = StratifiedKFold(n_splits=self.n_splits, shuffle=self.shuffle, random_state=self.random_state)
+            if self.setting == 'classification':
+                kf = StratifiedKFold(n_splits=self.n_splits, shuffle=self.shuffle, random_state=self.random_state)
+            else:
+                kf = KFold(n_splits=self.n_splits, shuffle=self.shuffle, random_state=self.random_state)
+
             estimator = self.estimator
-            estimator.fit(_x_train, _y_train)
+            estimator.fit(_x_train, _y_train.flatten())
             self.estimators.append(estimator)
             for train_index, test_index in kf.split(_x_train, _y_train):
                 estimator = self.estimator
                 estimator.fit(_x_train[train_index], _y_train[train_index].flatten())
-                clf_score = self.estimator.predict_proba(_x_train[test_index])
-                self.clf_y_cal.append(_y_train[test_index])
-                self.clf_p_cal.append(clf_score)
                 self.estimators.append(estimator)
+                if self.setting == 'classification':
+                    clf_score = self.estimator.predict_proba(_x_train[test_index])
+                    self.clf_y_cal.append(_y_train[test_index])
+                else:
+                    clf_score = self.estimator.predict(_x_train[test_index])
+                    ordered_labels = np.sort(_y_train[test_index])
+                    y_star_lower = ordered_labels[self.m_parameter + 1]
+                    y_star_upper = ordered_labels[len(ordered_labels) - self.m_parameter - 1]
+                    y_starred = _y_train[test_index]
+                    y_starred[_y_train[test_index] < y_star_lower] = y_star_lower
+                    y_starred[_y_train[test_index] > y_star_upper] = y_star_upper
+                    self.clf_y_cal.append(y_starred)
+                    self.y_stars_lower.append(y_star_lower)
+                    self.y_stars_upper.append(y_star_upper)
+                self.clf_p_cal.append(clf_score)
 
     def predict_proba(self, _x_test, loss='log', p0_p1_output=False):
         """ Generates Venn-ABERS calibrated probabilities.
@@ -553,6 +703,47 @@ class VennAbersCV:
             return p_prime, p0_p1
         else:
             return p_prime
+
+    def predict_interval(self, _x_test):
+        """ Generates Venn-ABERS calibrated intervals
+
+                Parameters
+                ----------
+                _x_test : {array-like}, shape (n_samples,)
+                    Training set features
+
+
+                Returns
+                ----------
+                p_prime: {array-like}, shape (n_samples,n_classses)
+                    Venn-ABERS calibrated interval-midpoint
+
+                p_lower_p_upper: {array-like}, default  = None
+                    Venn-ABERS calibrated lower and upper regression intervals
+                """
+        intervals_range = []
+        intervals_mid = []
+
+        clf_score_test = self.estimator.predict(_x_test)
+        for i in range(self.n_splits):
+            va = VennAbers(setting=self.setting)
+            va.fit(p_cal=self.clf_p_cal[i], y_cal=self.clf_y_cal[i])
+            _, interval = va.predict_proba(p_test=clf_score_test)
+            intervals_range.append(interval)
+
+            mid_1 = \
+                (interval[:, 0] -
+                 self.y_stars_lower[i]) / (interval[:, 0] - self.y_stars_lower[i] + self.y_stars_upper[i] -
+                                           interval[:, 1]) * interval[:, 0]
+
+            mid_2 = \
+                (self.y_stars_upper[i] -
+                 interval[:, 1]) / (interval[:, 0] - self.y_stars_lower[i] + self.y_stars_upper[i] -
+                                           interval[:, 1]) * interval[:, 1]
+
+            intervals_mid.append(mid_1 + mid_2)
+
+        return intervals_mid, intervals_range
 
 
 class VennAbersMultiClass:
@@ -777,7 +968,7 @@ class VennAbersCalibrator:
             The classifier whose output need to be calibrated to provide more
             accurate `predict_proba` outputs.
 
-        inductive : bool
+        inductive : bool, default = True
                 True to run the Inductive (IVAP) or False for Cross (CVAP) Venn-ABERS calibtration
 
         n_splits: int, default=5
@@ -1061,3 +1252,145 @@ class VennAbersCalibrator:
         else:
             y_pred = np.array([self.classes[i] for i in idx])
         return y_pred
+
+
+class VennAberRegressor:
+    """ A wrapper for Venn-ABERS regression
+
+           A class implementing a novel Venn-ABERS regression algorithm.
+
+           Can be used in 3 different forms:
+
+               - Inductive Venn-ABERS
+               - Cross Venn-ABERS
+               - Manual Venn-ABERS
+
+           For more details see Examples below.
+
+           Parameters
+           __________
+
+           estimator : sci-kit learn estimator instance, default=None
+               The classifier whose output need to be calibrated to provide more
+               accurate `predict_proba` outputs.
+
+           inductive : bool, default = True
+                   True to run the Inductive (IVAP) or False for Cross (CVAP) Venn-ABERS calibtration
+
+           n_splits: int, default=5
+                   For CVAP only, number of folds. Must be at least 2.
+                   Uses sklearn.model_selection.StratifiedKFold functionality
+                   (https://scikit-learn.org/stable/modules/generated/sklearn.model_selection.StratifiedKFold.html).
+
+           cal_size : float or int, default=None
+                   For IVAP only, uses sklearn.model_selection.train_test_split functionality
+                   (https://scikit-learn.org/stable/modules/generated/sklearn.model_selection.train_test_split.html).
+                   If float, should be between 0.0 and 1.0 and represent the proportion
+                   of the dataset to include in the proper training / calibration split.
+                   If int, represents the absolute number of test samples. If None, the
+                   value is set to the complement of the train size. If ``train_size``
+                   is also None, it will be set to 0.25.
+
+           train_size : float or int, default=None
+                   For IVAP only, if float, should be between 0.0 and 1.0 and represent the
+                   proportion of the dataset to include in the poroper training set split. If
+                   int, represents the absolute number of train samples. If None,
+                   the value is automatically set to the complement of the test size.
+
+           random_state : int, RandomState instance or None, default=None
+                   Controls the shuffling applied to the data before applying the split.
+                   Pass an int for reproducible output across multiple function calls.
+
+           shuffle : bool, default=True
+                   Whether to shuffle the data before splitting.
+               """
+    def __init__(
+            self,
+            estimator=None,
+            inductive=True,
+            n_splits=None,
+            cal_size=None,
+            train_proper_size=None,
+            random_state=None,
+            shuffle=True
+    ):
+        self.estimator = estimator
+        self.inductive = inductive
+        self.n_splits = n_splits
+        self.cal_size = cal_size
+        self.train_proper_size = train_proper_size
+        self.random_state = random_state
+        self.shuffle = shuffle
+        self.va_calibrator = None
+        self.m_parameter = None
+        self.epsilon = None
+
+    def fit(self,
+            _x_train,
+            _y_train,
+            m=1,
+            epsilon=None
+            ):
+        """ Fits the Venn-ABERS regression calibrator to the training set when underlying sci-kit learn classifier
+        is provided (IVAP and CVAP only)
+
+        Parameters
+        ----------
+        _x_train : {array-like}, shape (n_samples,)
+            Input data for calibration consisting of training set numerical or categorical features. If categorical,
+            features are one hot encoded using pandas.get_dummies()
+
+        _y_train : {array-like}, shape (n_samples,)
+            Associated binary class labels.
+
+        m: int, default = 1
+            threshold for the number of calibration set labels which will be excluded from the calibration
+
+        epsilon: float, default = None
+            parameter controlling the exclusion of extreme labels, if not provided then epsilon = 2m / (k+1)
+
+        """
+
+        # integrity checks
+        if not self.inductive and self.n_splits is None:
+            raise Exception("For Cross Venn-ABERS please provide n_splits")
+        try:
+            check_is_fitted(self.estimator)
+        except NotFittedError:
+            if self.inductive and self.cal_size is None and self.train_proper_size is None:
+                raise Exception("For Inductive Venn-ABERS please provide either calibration or proper train set size")
+
+        self.epsilon = epsilon
+
+        self.va_calibrator = VennAbersCV(
+            estimator=self.estimator,
+            inductive=self.inductive,
+            n_splits=self.n_splits,
+            cal_size=self.cal_size,
+            train_proper_size=self.train_proper_size,
+            random_state=self.random_state,
+            shuffle=self.shuffle,
+            setting='regression',
+            epsilon=self.epsilon,
+            m_parameter=m
+        )
+
+        self.va_calibrator.fit(_x_train, _y_train)
+
+    def predict(self, _x_test, return_folds=False):
+        intervals_mid, intervals_range = self.va_calibrator.predict_interval(_x_test)
+        folds = {}
+        if return_folds:
+            folds = {'mid': intervals_mid, 'range': intervals_range}
+        if len(intervals_mid) > 1:
+            mid = np.mean(np.array(intervals_mid).T, axis=1)
+            lower = np.mean(np.array([i[:, 0] for i in intervals_range]).T, axis=1)
+            upper = np.mean(np.array([i[:, 1] for i in intervals_range]).T, axis=1)
+        else:
+            mid = np.array(intervals_mid).T
+            lower = np.array([i[:, 0] for i in intervals_range]).T
+            upper = np.array([i[:, 1] for i in intervals_range]).T
+        if return_folds:
+            return mid, np.hstack((lower, upper)), folds
+        else:
+            return mid, np.hstack((lower, upper))
