@@ -1,1 +1,1 @@
-from .venn_abers import VennAbersCalibrator, VennAbersMultiClass, VennAbersCV, VennAbers
+from .venn_abers import VennAbersCalibrator, VennAbersMultiClass, VennAbersCV, VennAbers, VennAberRegressor
