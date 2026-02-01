@@ -44,7 +44,8 @@ Further examples can be found in the github repository https://github.com/ip200/
 
 - [simple_classification.ipynb](https://github.com/ip200/venn-abers/blob/main/examples/simple_classification.ipynb) for a simple example in the binary classification setting.
 - [multiclass_classification.ipynb](https://github.com/ip200/venn-abers/blob/main/examples/multiclass_classification.ipynb) for the multiclass setting.
-- [comparison_with_existing.ipynb](https://github.com/ip200/venn-abers/blob/main/examples/comparison_with_existing.ipynb) for the comparison with a previous github implementation
+- [comparison_with_existing.ipynb](https://github.com/ip200/venn-abers/blob/main/examples/comparison_with_existing.ipynb) for the comparison with a previous github implementation.
+- [ivar_example.ipynb](https://github.com/ip200/venn-abers/examples/ivar_example.ipynb) for an example of Inductive Venn-ABERS for regression.
 
 
 ### Citation
