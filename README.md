@@ -72,11 +72,14 @@ The `venn-abers` library has been used or referenced in several academic works r
 
 These papers apply Venn‑Abers, IVAP, or CVAP calibration methods.
 
+- **Manokhin and Grønhaug (2025)**  
+  [*Classifier Calibration at Scale: An Empirical Study of Model-Agnostic Post-Hoc Methods.*](https://papers.ssrn.com/sol3/papers.cfm?abstract_id=6094047)
+
+- **Boger et al. (2025)**  
+  [*Functional protein mining with conformal guarantees.*](https://www.nature.com/articles/s41467-024-55676-y)  
+
 - **van der Laan & Alaa (2025)**  
   [*Generalized Venn and Venn‑Abers Calibration with Applications in Conformal Prediction.*](https://arxiv.org/abs/2502.05676)
-
-- **van der Laan & Alaa (2024)**  
-  [*Self‑Calibrating Conformal Prediction.*](https://arxiv.org/abs/2402.07307)
 
 - **Johansson, Löfström & Sönströd (2023)**  
   [*Well‑Calibrated Probabilistic Predictive Maintenance using Venn‑Abers.*](https://arxiv.org/abs/2306.06642)
@@ -85,13 +88,7 @@ These papers apply Venn‑Abers, IVAP, or CVAP calibration methods.
   [*Targeting the Uncertainty of Predictions at Patient Level.*](https://doi.org/10.1016/j.jbi.2019.103350)  
   Journal of Biomedical Informatics.
 
-- **Manokhin (2022)**  
-  [*Inductive and Cross Venn‑Abers Predictors for Probabilistic Classification.*](https://pure.royalholloway.ac.uk/en/studentTheses/machine-learning-for-probabilistic-prediction)  
-  PhD Thesis, Royal Holloway University of London.
-
-- **SSRN Working Paper (2025)**  
-  *Classifier Calibration at Scale: An Empirical Study of Model-Agnostic Post-Hoc Methods.*  
-  https://papers.ssrn.com/sol3/papers.cfm?abstract_id=6094047
+For a more comprehensive list please see [*Google Scholar*](https://scholar.google.com/scholar?cites=7349763935201730660&as_sdt=2005&sciodt=0,5&hl=en)
 
 ---
 
@@ -128,9 +125,10 @@ You may also cite the foundational paper:
 
 ```bibtex
 @inproceedings{vovk2014venn,
-  title={Venn-Abers Predictors},
+  title={Venn-Abers predictors},
   author={Vovk, Vladimir and Petej, Ivan},
-  booktitle={UAI},
+  booktitle={Proceedings of the Thirtieth Conference on Uncertainty in Artificial Intelligence},
+  pages={829--838},
   year={2014}
 }
 ```
