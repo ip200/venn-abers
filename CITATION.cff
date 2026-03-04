@@ -1,0 +1,22 @@
+cff-version: 1.2.0
+title: "venn-abers: Venn-Abers calibration for probabilistic classifiers"
+message: "If you use this software, please cite it using the metadata below."
+type: software
+
+authors:
+  - family-names: Petej
+    given-names: Ivan
+
+repository-code: https://github.com/ip200/venn-abers
+url: https://github.com/ip200/venn-abers
+
+keywords:
+  - machine learning
+  - probability calibration
+  - venn-abers
+  - conformal prediction
+  - uncertainty estimation
+
+license: MIT
+version: 1.5.1
+date-released: 2026-03-08

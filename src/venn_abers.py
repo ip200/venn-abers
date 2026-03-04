@@ -276,10 +276,37 @@ def calc_probs(p0, p1, c, p_test, setting='classification'):
 
 
 def geo_mean(a):
+    """Calculates the geometric mean along axis 1.
+
+    Parameters
+    ----------
+    a : {array-like}
+        Input array.
+
+    Returns
+    -------
+    {array-like}
+        Geometric mean of the input array elements along axis 1.
+    """
     return a.prod(axis=1)**(1.0/a.shape[1])
 
 
 def adjust_categorical_train(_x_train):
+    """Applies one-hot encoding to categorical features in the training set.
+
+    Parameters
+    ----------
+    _x_train : {array-like or pandas.DataFrame}, shape (n_samples, n_features)
+        Input training features.
+
+    Returns
+    -------
+    _x_train_df : {array-like}
+        One-hot encoded training features as a numpy array.
+
+    train_columns : pandas.Index
+        The column names of the resulting one-hot encoded dataframe.
+    """
 
     if isinstance(_x_train, pd.DataFrame):
         _x_train_df = pd.get_dummies(_x_train)
@@ -292,6 +319,22 @@ def adjust_categorical_train(_x_train):
 
 
 def adjust_categorical_test(train_columns, _x_test):
+    """Applies one-hot encoding to categorical features in the test set,
+    ensuring consistency with the training set columns.
+
+    Parameters
+    ----------
+    train_columns : pandas.Index or list
+        The column names expected from the training set one-hot encoding.
+
+    _x_test : {array-like or pandas.DataFrame}
+        Input test features.
+
+    Returns
+    -------
+    _x_test_df : {array-like}
+        One-hot encoded test features aligned with `train_columns`.
+    """
 
     if isinstance(_x_test, pd.DataFrame):
         _x_test_df = pd.get_dummies(_x_test)
@@ -315,7 +358,36 @@ def predict_proba_prefitted_va(
         precision=None,
         va_tpe='one_vs_one'
 ):
+    """Generates multi-class Venn-ABERS probabilities using a pre-fitted approach.
 
+    Parameters
+    ----------
+    p_cal : {array-like}, shape (n_samples, n_classes)
+        Calibration set probabilities.
+
+    y_cal : {array-like}, shape (n_samples,)
+        Calibration set labels.
+
+    p_test : {array-like}, shape (n_samples, n_classes)
+        Test set probabilities to be calibrated.
+
+    precision : int, default=None
+        Optional number of decimal points to which Venn-Abers calibration
+        probabilities are rounded.
+
+    va_tpe : str, default='one_vs_one'
+        If 'one_vs_one', sets up binary calibration for each pair of classes.
+        If 'one_vs_rest' (or other), sets up binary calibration for each class vs all others.
+
+    Returns
+    -------
+    p_prime : {array-like}, shape (n_samples, n_classes)
+        Calibrated probabilities for the test set.
+
+    multiclass_p0p1 : list
+        Venn-ABERS calibrated p0 and p1 outputs for each binary sub-problem.
+    """
+    
     p_prime = None
     multiclass_p0p1 = None
 
@@ -547,7 +619,7 @@ class VennAbersCV:
                  cal_size=None,
                  train_proper_size=None,
                  random_state=None,
-                 shuffle=None,
+                 shuffle=False,
                  stratify=None,
                  precision=None,
                  setting='classification',
@@ -816,7 +888,7 @@ class VennAbersMultiClass:
                  cal_size=None,
                  train_proper_size=None,
                  random_state=None,
-                 shuffle=None,
+                 shuffle=False,
                  stratify=None,
                  precision=None,
                  cv_ensemble=True
@@ -1378,6 +1450,28 @@ class VennAberRegressor:
         self.va_calibrator.fit(_x_train, _y_train)
 
     def predict(self, _x_test, return_folds=False):
+        """Generates Venn-ABERS calibrated regression intervals and predictions.
+
+        Parameters
+        ----------
+        _x_test : {array-like}, shape (n_samples, n_features)
+            Test set numerical or categorical features.
+
+        return_folds : bool, default=False
+            If True, additionally returns the predictions and intervals for each fold.
+
+        Returns
+        -------
+        mid : {array-like}, shape (n_samples,)
+            Mean value combining predictions from all folds (predicted regression value).
+
+        intervals : {array-like}, shape (n_samples, 2)
+            Array with combined lower and upper interval bounds.
+
+        folds : dict, optional
+            Dictionary containing 'mid' and 'range' for each individual fold.
+            Returned only if `return_folds` is True.
+        """
         intervals_mid, intervals_range = self.va_calibrator.predict_interval(_x_test)
         folds = {}
         if return_folds:
@@ -1390,7 +1484,9 @@ class VennAberRegressor:
             mid = np.array(intervals_mid).T
             lower = np.array([i[:, 0] for i in intervals_range]).T
             upper = np.array([i[:, 1] for i in intervals_range]).T
+            
+        mid = np.squeeze(mid)
         if return_folds:
-            return mid, np.hstack((lower, upper)), folds
+            return mid, np.column_stack((lower, upper)), folds
         else:
-            return mid, np.hstack((lower, upper))
+            return mid, np.column_stack((lower, upper))
