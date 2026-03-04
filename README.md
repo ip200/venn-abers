@@ -48,9 +48,100 @@ Further examples can be found in the github repository https://github.com/ip200/
 - [ivar_example.ipynb](https://github.com/ip200/venn-abers/blob/main/examples/ivar_example.ipynb) for an example of Inductive Venn-ABERS for regression.
 
 
-### Citation
-If you find this library useful please consider citing:
+## Academic Usage
 
-- Vovk, Vladimir, Ivan Petej and Valentina Fedorova. "Large-scale probabilistic predictors with and without guarantees of validity." Advances in Neural Information Processing Systems 28 (2015) (arxiv version https://arxiv.org/pdf/1511.00213.pdf)
-- Vovk, Vladimir, Ivan Petej. "Venn-Abers predictors". Proceedings of the Thirtieth Conference on Uncertainty in Artificial Intelligence (2014) (arxiv version https://arxiv.org/abs/1211.0025)
-- Manokhin, Valery. "Multi-class probabilistic classification using inductive and cross Venn–Abers predictors." Conformal and Probabilistic Prediction and Applications, PMLR, 2017.
+The `venn-abers` library has been used or referenced in several academic works related to probability calibration, uncertainty estimation, and conformal prediction.
+
+### Papers Referencing This Repository
+
+- **Kazantsev, D. (2025)**  
+  [*Adaptive Set‑Mass Calibration with Conformal Prediction.*](https://arxiv.org/abs/2505.15437)  
+  arXiv:2505.15437
+
+- **Rabenseifner, M. (2025)**  
+  [*Calibration Strategies for Robust Causal Estimation: Theoretical and Empirical Insights on Propensity Score Based Estimators.*](https://arxiv.org/abs/2503.17290)  
+  arXiv:2503.17290
+
+- **Löfström et al. (2024)**  
+  [*Calibrated Explanations: With Uncertainty Information and Counterfactuals.*](https://doi.org/10.1016/j.eswa.2024.123154)  
+  Expert Systems with Applications.
+
+---
+
+### Research Using Venn‑Abers Calibration
+
+These papers apply Venn‑Abers, IVAP, or CVAP calibration methods.
+
+- **Manokhin and Grønhaug (2025)**  
+  [*Classifier Calibration at Scale: An Empirical Study of Model-Agnostic Post-Hoc Methods.*](https://papers.ssrn.com/sol3/papers.cfm?abstract_id=6094047)
+
+- **Boger et al. (2025)**  
+  [*Functional protein mining with conformal guarantees.*](https://www.nature.com/articles/s41467-024-55676-y)  
+
+- **van der Laan & Alaa (2025)**  
+  [*Generalized Venn and Venn‑Abers Calibration with Applications in Conformal Prediction.*](https://arxiv.org/abs/2502.05676)
+
+- **Johansson, Löfström & Sönströd (2023)**  
+  [*Well‑Calibrated Probabilistic Predictive Maintenance using Venn‑Abers.*](https://arxiv.org/abs/2306.06642)
+
+- **Pereira et al. (2020)**  
+  [*Targeting the Uncertainty of Predictions at Patient Level.*](https://doi.org/10.1016/j.jbi.2019.103350)  
+  Journal of Biomedical Informatics.
+
+For a more comprehensive list please see [*Google Scholar*](https://scholar.google.com/scholar?cites=7349763935201730660&as_sdt=2005&sciodt=0,5&hl=en)
+
+---
+
+### Related Libraries
+
+- **MAPIE – Model Agnostic Prediction Interval Estimator**  
+  MAPIE includes calibration utilities referencing Venn‑Abers predictors.  
+  https://github.com/scikit-learn-contrib/MAPIE
+
+---
+
+## Foundational Research
+
+- Vovk & Petej (2014) — [*Venn‑Abers Predictors.*](https://arxiv.org/abs/1211.0025)
+- Vovk, Petej & Fedorova (2015) — [*Large‑scale probabilistic predictors with validity guarantees.*](https://arxiv.org/abs/1511.00213)
+- Manokhin (2017) — [*Multi‑class probabilistic classification using inductive and cross Venn‑Abers predictors.*](https://proceedings.mlr.press/v60/manokhin17a.html)
+
+---
+
+## Citation
+
+If you use this library in academic work, please cite:
+
+```bibtex
+@software{petej_venn_abers,
+  author = {Petej, Ivan},
+  title = {venn-abers: Venn-Abers calibration for probabilistic classifiers},
+  year = {2024},
+  url = {https://github.com/ip200/venn-abers}
+}
+```
+
+You may also cite the foundational paper:
+
+```bibtex
+@inproceedings{vovk2014venn,
+  title={Venn-Abers predictors},
+  author={Vovk, Vladimir and Petej, Ivan},
+  booktitle={Proceedings of the Thirtieth Conference on Uncertainty in Artificial Intelligence},
+  pages={829--838},
+  year={2014}
+}
+```
+
+---
+
+## Contributing
+
+Contributions and pull requests are welcome.  
+If you are aware of additional research using this library, please open a PR to add it to the **Academic Usage** section.
+
+---
+
+## License
+
+MIT License
