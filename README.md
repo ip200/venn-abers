@@ -38,6 +38,31 @@ p_prime = va.predict_proba(X_test)
 y_pred = va.predict(X_test)
 ```
 
+### Scikit-Learn Compatibility
+The `venn-abers` library is fully compatible natively with the `scikit-learn` ecosystem! It seamlessly inherits from `BaseEstimator` allowing it to be dropped directly into workflows like `Pipeline`, `GridSearchCV`, and `cross_val_score`. 
+
+Furthermore, this compatibility is **100% backwards-compatible** with all previous implementations of the library, so no existing code will break.
+
+You can also pass `**kwargs` directly into the `.fit()` method to route parameters dynamically to the underlying estimator (e.g. passing `eval_set` to XGBoost):
+
+```python
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import StandardScaler
+from xgboost import XGBClassifier
+from venn_abers import VennAbersCalibrator
+
+# Passing kwargs through fit explicitly
+va = VennAbersCalibrator(estimator=XGBClassifier(), inductive=True, cal_size=0.2)
+va.fit(X_train, y_train, eval_set=[(X_val, y_val)], early_stopping_rounds=10)
+
+# Scikit-learn Pipeline Integration
+pipeline = Pipeline([
+    ('scaler', StandardScaler()),
+    ('va', VennAbersCalibrator(estimator=GaussianNB(), inductive=True, cal_size=0.2))
+])
+pipeline.fit(X_train, y_train)
+p_prime_pipeline = pipeline.predict_proba(X_test)
+```
 
 ### Examples
 Further examples can be found in the github repository https://github.com/ip200/venn-abers in the `examples` folder:
@@ -46,6 +71,7 @@ Further examples can be found in the github repository https://github.com/ip200/
 - [multiclass_classification.ipynb](https://github.com/ip200/venn-abers/blob/main/examples/multiclass_classification.ipynb) for the multiclass setting.
 - [comparison_with_existing.ipynb](https://github.com/ip200/venn-abers/blob/main/examples/comparison_with_existing.ipynb) for the comparison with a previous github implementation.
 - [ivar_example.ipynb](https://github.com/ip200/venn-abers/blob/main/examples/ivar_example.ipynb) for an example of Inductive Venn-ABERS for regression.
+- [scikit_learn_integration.ipynb](https://github.com/ip200/venn-abers/blob/main/examples/scikit_learn_integration.ipynb) for an example of the scikit-learn native integration.
 
 
 ## Academic Usage
