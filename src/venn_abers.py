@@ -3,7 +3,7 @@ from sklearn.model_selection import StratifiedKFold, train_test_split, KFold
 from sklearn.multiclass import OneVsOneClassifier
 from sklearn.utils.validation import check_is_fitted, check_X_y, check_array
 from sklearn.exceptions import NotFittedError
-from sklearn.base import BaseEstimator, ClassifierMixin
+from sklearn.base import BaseEstimator, ClassifierMixin, RegressorMixin
 from sklearn.utils.multiclass import unique_labels
 import pandas as pd
 
@@ -456,7 +456,7 @@ def predict_proba_prefitted_va(
     return p_prime, multiclass_p0p1
 
 
-class VennAbers:
+class VennAbers(BaseEstimator, ClassifierMixin):
     """Implementation of the Venn-ABERS calibration for binary classification problems. Venn-ABERS calibration is a
         method of turning machine learning classification algorithms into probabilistic predictors
         that automatically enjoys a property of validity (perfect calibration) and is computationally efficient.
@@ -495,12 +495,12 @@ class VennAbers:
         >>> p_prime, p0_p1 = va.predict_proba(p_test)
         """
     def __init__(self, setting='classification'):
-        self.p0 = None
-        self.p1 = None
-        self.c = None
         self.setting = setting
 
-    def fit(self, p_cal, y_cal, precision=None):
+    def fit(self, X=None, y=None, **kwargs):
+        p_cal = kwargs.get('p_cal', X)
+        y_cal = kwargs.get('y_cal', y)
+        precision = kwargs.get('precision', None)
         """Fits the VennAbers calibrator to the calibration dataset
 
 
@@ -516,9 +516,18 @@ class VennAbers:
             Optional number of decimal points to which Venn-Abers calibration probabilities p_cal are rounded to.
             Yields significantly faster computation time for larger calibration datasets
         """
-        self.p0, self.p1, self.c = calc_p0p1(p_cal, y_cal, precision, setting=self.setting)
+        self.p0_, self.p1_, self.c_ = calc_p0p1(p_cal, y_cal, precision, setting=self.setting)
+        self.p0 = self.p0_
+        self.p1 = self.p1_
+        self.c = self.c_
+        return self
+        
+    def predict(self, X=None, **kwargs):
+        p_prime, _ = self.predict_proba(X, **kwargs)
+        return (p_prime[:, 1] >= 0.5).astype(int)
 
-    def predict_proba(self, p_test):
+    def predict_proba(self, X=None, **kwargs):
+        p_test = kwargs.get('p_test', X)
         """Generates Venn-Abers probability estimates
 
 
@@ -537,11 +546,11 @@ class VennAbers:
             Associated multiprobability outputs
             (as described in Section 4 in https://arxiv.org/pdf/1511.00213.pdf)
         """
-        p_prime, p0_p1 = calc_probs(self.p0, self.p1, self.c, p_test, setting=self.setting)
+        p_prime, p0_p1 = calc_probs(self.p0_, self.p1_, self.c_, p_test, setting=self.setting)
         return p_prime, p0_p1
 
 
-class VennAbersCV:
+class VennAbersCV(BaseEstimator, ClassifierMixin):
     """Inductive (IVAP) or Cross (CVAP) Venn-ABERS prediction method for binary classification problems
 
         Implements the Inductive or Cross Venn-Abers calibration method as described in Sections 2-4 in [1]
@@ -629,11 +638,6 @@ class VennAbersCV:
 
         self.estimator = estimator
         self.n_splits = n_splits
-        self.clf_p_cal = []
-        self.clf_y_cal = []
-        self.y_stars_lower = []
-        self.y_stars_upper = []
-        self.estimators = []
         self.cv_ensemble = cv_ensemble
         self.inductive = inductive
         self.cal_size = cal_size
@@ -643,10 +647,21 @@ class VennAbersCV:
         self.stratify = stratify
         self.precision = precision
         self.setting = setting
-        self.epsilon = epsilon
+        self.epsilon_ = self.epsilon = epsilon
         self.m_parameter = m_parameter
 
-    def fit(self, _x_train, _y_train):
+        
+    def fit(self, X=None, y=None, **kwargs):
+        _x_train = kwargs.pop('_x_train', X)
+        _y_train = kwargs.pop('_y_train', y)
+        self.c_p_cals_ = self.c_p_cals = []
+        self.c_p_tests_ = self.c_p_tests = []
+        self.estimators_ = self.estimators = []
+        self.clf_p_cal_ = self.clf_p_cal = []
+        self.clf_y_cal_ = self.clf_y_cal = []
+        self.y_stars_lower_ = self.y_stars_lower = []
+        self.y_stars_upper_ = self.y_stars_upper = []
+        self.estimators_ = self.estimators = []
         """ Fits the IVAP or CVAP calibrator to the training set.
 
         Parameters
@@ -660,8 +675,8 @@ class VennAbersCV:
         if self.inductive:
             self.n_splits = 1
             estimator = self.estimator
-            estimator.fit(_x_train, _y_train.flatten())
-            self.estimators.append(estimator)
+            estimator.fit(_x_train, _y_train.flatten(), **kwargs)
+            self.estimators_.append(estimator)
             x_train_proper, x_cal, y_train_proper, y_cal = train_test_split(
                 _x_train,
                 _y_train,
@@ -672,8 +687,8 @@ class VennAbersCV:
                 stratify=self.stratify
             )
             estimator = self.estimator
-            estimator.fit(x_train_proper, y_train_proper.flatten() if y_train_proper.ndim > 1 else y_train_proper)
-            self.estimators.append(estimator)
+            estimator.fit(x_train_proper, y_train_proper.flatten() if y_train_proper.ndim > 1 else y_train_proper, **kwargs)
+            self.estimators_.append(estimator)
             if self.setting == 'regression':
                 if self.epsilon:
                     self.m_parameter = int(np.round(self.epsilon * (len(y_cal) + 1) / 2))
@@ -702,12 +717,12 @@ class VennAbersCV:
                 kf = KFold(n_splits=self.n_splits, shuffle=self.shuffle, random_state=self.random_state)
 
             estimator = self.estimator
-            estimator.fit(_x_train, _y_train.flatten())
-            self.estimators.append(estimator)
+            estimator.fit(_x_train, _y_train.flatten(), **kwargs)
+            self.estimators_.append(estimator)
             for train_index, test_index in kf.split(_x_train, _y_train):
                 estimator = self.estimator
-                estimator.fit(_x_train[train_index], _y_train[train_index].flatten())
-                self.estimators.append(estimator)
+                estimator.fit(_x_train[train_index], _y_train[train_index].flatten(), **kwargs)
+                self.estimators_.append(estimator)
                 if self.setting == 'classification':
                     clf_score = self.estimator.predict_proba(_x_train[test_index])
                     self.clf_y_cal.append(_y_train[test_index])
@@ -724,7 +739,10 @@ class VennAbersCV:
                     self.y_stars_upper.append(y_star_upper)
                 self.clf_p_cal.append(clf_score)
 
-    def predict_proba(self, _x_test, loss='log', p0_p1_output=False):
+    def predict_proba(self, X=None, **kwargs):
+        _x_test = kwargs.get('_x_test', X)
+        loss = kwargs.get('loss', 'log')
+        p0_p1_output = kwargs.get('p0_p1_output', False)
         """ Generates Venn-ABERS calibrated probabilities.
 
 
@@ -776,7 +794,8 @@ class VennAbersCV:
         else:
             return p_prime
 
-    def predict_interval(self, _x_test):
+    def predict_interval(self, X=None, **kwargs):
+        _x_test = kwargs.get('_x_test', X)
         """ Generates Venn-ABERS calibrated intervals
 
                 Parameters
@@ -805,12 +824,12 @@ class VennAbersCV:
 
             mid_1 = \
                 (interval[:, 0] -
-                 self.y_stars_lower[i]) / (interval[:, 0] - self.y_stars_lower[i] + self.y_stars_upper[i] -
+                 self.y_stars_lower_[i]) / (interval[:, 0] - self.y_stars_lower_[i] + self.y_stars_upper_[i] -
                                            interval[:, 1]) * interval[:, 0]
 
             mid_2 = \
-                (self.y_stars_upper[i] -
-                 interval[:, 1]) / (interval[:, 0] - self.y_stars_lower[i] + self.y_stars_upper[i] -
+                (self.y_stars_upper_[i] -
+                 interval[:, 1]) / (interval[:, 0] - self.y_stars_lower_[i] + self.y_stars_upper_[i] -
                                            interval[:, 1]) * interval[:, 1]
 
             intervals_mid.append(mid_1 + mid_2)
@@ -818,7 +837,7 @@ class VennAbersCV:
         return intervals_mid, intervals_range
 
 
-class VennAbersMultiClass:
+class VennAbersMultiClass(BaseEstimator, ClassifierMixin):
     """Inductive (IVAP) or Cross (CVAP) Venn-ABERS prediction method for multi-class classification problems
 
         Implements the Inductive or Cross Venn-Abers calibration method as described in [1]
@@ -913,7 +932,10 @@ class VennAbersMultiClass:
         self.precision = precision
         self.cv_ensemble = cv_ensemble
 
-    def fit(self, _x_train, _y_train):
+        
+    def fit(self, X=None, y=None, **kwargs):
+        _x_train = kwargs.pop('_x_train', X)
+        _y_train = kwargs.pop('_y_train', y)
         """ Fits the Venn-ABERS calibrator to the training set
 
         Parameters
@@ -935,7 +957,7 @@ class VennAbersMultiClass:
             if self.inductive and self.cal_size is None and self.train_proper_size is None:
                 raise Exception("For Inductive Venn-ABERS please provide either calibration or proper train set size")
 
-        self.classes = np.unique(_y_train)
+        self.classes_ = self.classes = np.unique(_y_train)
         self.n_classes = len(self.classes)
 
         for i in range(self.n_classes):
@@ -960,10 +982,14 @@ class VennAbersMultiClass:
             )
             va_cv.fit(
                 _x_train[_pairwise_indices],
-                np.array(_y_train[_pairwise_indices] == self.pairwise_id[pair_id][1]).reshape(-1, 1))
+                np.array(_y_train[_pairwise_indices] == self.pairwise_id[pair_id][1]).reshape(-1, 1), **kwargs)
             self.multiclass_va_estimators.append(va_cv)
+        return self
 
-    def predict_proba(self, _x_test, loss='log', p0_p1_output=False):
+    def predict_proba(self, X=None, **kwargs):
+        _x_test = kwargs.get('_x_test', X)
+        loss = kwargs.get('loss', 'log')
+        p0_p1_output = kwargs.get('p0_p1_output', False)
         """ Generates Venn-ABERS calibrated probabilities.
 
 
@@ -1020,7 +1046,7 @@ class VennAbersMultiClass:
             return p_prime
 
 
-class VennAbersCalibrator:
+class VennAbersCalibrator(BaseEstimator, ClassifierMixin):
     """ A wrapper for Venn-ABERS binary and multi-class calibration
 
         A class implementing binary [1] or mult-class [2] Venn-ABERS calibration.
@@ -1149,16 +1175,13 @@ class VennAbersCalibrator:
         self.random_state = random_state
         self.shuffle = shuffle
         self.stratify = stratify
-        self.va_calibrator = None
-        self.classes = None
-        self.precision = precision
-        self.train_columns = None
         self.cv_ensemble = cv_ensemble
+        self.precision = precision
 
-    def fit(self,
-            _x_train,
-            _y_train
-            ):
+        
+    def fit(self, X=None, y=None, **kwargs):
+        _x_train = kwargs.pop('_x_train', X)
+        _y_train = kwargs.pop('_y_train', y)
         """ Fits the Venn-ABERS calibrator to the training set when underlying sci-kit learn classifier is provided
             (IVAP and CVAP only)
 
@@ -1182,9 +1205,9 @@ class VennAbersCalibrator:
             if self.inductive and self.cal_size is None and self.train_proper_size is None:
                 raise Exception("For Inductive Venn-ABERS please provide either calibration or proper train set size")
 
-        _x_train, self.train_columns = adjust_categorical_train(_x_train)
+        _x_train, self.train_columns_ = self.train_columns = adjust_categorical_train(_x_train)
 
-        self.va_calibrator = VennAbersMultiClass(
+        self.va_calibrator_ = self.va_calibrator = VennAbersMultiClass(
             estimator=self.estimator,
             inductive=self.inductive,
             n_splits=self.n_splits,
@@ -1197,18 +1220,18 @@ class VennAbersCalibrator:
             cv_ensemble=self.cv_ensemble
             )
 
-        self.classes = np.unique(_y_train)
-        self.va_calibrator.fit(_x_train, _y_train)
+        self.classes_ = self.classes_ = self.classes = np.unique(_y_train)
+        self.va_calibrator_.fit(_x_train, _y_train, **kwargs)
+        return self
 
-    def predict_proba(
-            self,
-            _x_test=None,
-            p_cal=None,
-            y_cal=None,
-            p_test=None,
-            loss='log',
-            p0_p1_output=False,
-            va_type='one_vs_one'):
+    def predict_proba(self, X=None, **kwargs):
+        _x_test = kwargs.get('_x_test', X)
+        p_cal = kwargs.get('p_cal', None)
+        y_cal = kwargs.get('y_cal', None)
+        p_test = kwargs.get('p_test', None)
+        loss = kwargs.get('loss', 'log')
+        p0_p1_output = kwargs.get('p0_p1_output', False)
+        va_type = kwargs.get('va_type', 'one_vs_one')
         """ Generates Venn-ABERS calibrated probabilities.
 
             Parameters
@@ -1259,7 +1282,7 @@ class VennAbersCalibrator:
             if len(np.unique(y_cal)) <= 2:
                 self.classes = np.unique(y_cal)
                 va = VennAbers()
-                va.fit(p_cal, y_cal, self.precision)
+                va.fit(p_cal, y_cal, precision=self.precision)
                 p_prime, p0_p1 = va.predict_proba(p_test)
             else:
                 self.classes = np.unique(y_cal)
@@ -1274,19 +1297,25 @@ class VennAbersCalibrator:
             if _x_test is None:
                 raise Exception("Please provide a feature test set to generate calibrated predictions")
 
-            _x_test = adjust_categorical_test(self.train_columns, _x_test)
+            _x_test = adjust_categorical_test(getattr(self, "train_columns_", self.train_columns), _x_test)
 
             if p0_p1_output:
-                p_prime, p0_p1 = self.va_calibrator.predict_proba(_x_test, loss=loss, p0_p1_output=True)
+                p_prime, p0_p1 = self.va_calibrator_.predict_proba(_x_test, loss=loss, p0_p1_output=True)
             else:
-                p_prime = self.va_calibrator.predict_proba(_x_test, loss=loss)
+                p_prime = self.va_calibrator_.predict_proba(_x_test, loss=loss)
 
         if p0_p1_output:
             return p_prime, p0_p1
         else:
             return p_prime
 
-    def predict(self, _x_test=None, p_cal=None, y_cal=None, p_test=None, loss='log', one_hot=True):
+    def predict(self, X=None, **kwargs):
+        _x_test = kwargs.get('_x_test', X)
+        p_cal = kwargs.get('p_cal', None)
+        y_cal = kwargs.get('y_cal', None)
+        p_test = kwargs.get('p_test', None)
+        loss = kwargs.get('loss', 'log')
+        one_hot = kwargs.get('one_hot', True)
         """ Generates Venn-ABERS calibrated prediction labels.
 
                 Parameters
@@ -1326,7 +1355,7 @@ class VennAbersCalibrator:
         return y_pred
 
 
-class VennAberRegressor:
+class VennAberRegressor(BaseEstimator, RegressorMixin):
     """ A wrapper for Venn-ABERS regression
 
            A class implementing a novel Venn-ABERS regression algorithm.
@@ -1393,16 +1422,12 @@ class VennAberRegressor:
         self.train_proper_size = train_proper_size
         self.random_state = random_state
         self.shuffle = shuffle
-        self.va_calibrator = None
-        self.m_parameter = None
-        self.epsilon = None
 
-    def fit(self,
-            _x_train,
-            _y_train,
-            m=1,
-            epsilon=None
-            ):
+    def fit(self, X=None, y=None, **kwargs):
+        _x_train = kwargs.pop('_x_train', X)
+        _y_train = kwargs.pop('_y_train', y)
+        m = kwargs.pop('m', 1)
+        epsilon = kwargs.pop('epsilon', None)
         """ Fits the Venn-ABERS regression calibrator to the training set when underlying sci-kit learn classifier
         is provided (IVAP and CVAP only)
 
@@ -1432,9 +1457,9 @@ class VennAberRegressor:
             if self.inductive and self.cal_size is None and self.train_proper_size is None:
                 raise Exception("For Inductive Venn-ABERS please provide either calibration or proper train set size")
 
-        self.epsilon = epsilon
+        self.epsilon_ = self.epsilon = epsilon
 
-        self.va_calibrator = VennAbersCV(
+        self.va_calibrator_ = self.va_calibrator = VennAbersCV(
             estimator=self.estimator,
             inductive=self.inductive,
             n_splits=self.n_splits,
@@ -1447,9 +1472,12 @@ class VennAberRegressor:
             m_parameter=m
         )
 
-        self.va_calibrator.fit(_x_train, _y_train)
+        self.va_calibrator_.fit(_x_train, _y_train, **kwargs)
+        return self
 
-    def predict(self, _x_test, return_folds=False):
+    def predict(self, X=None, **kwargs):
+        _x_test = kwargs.get('_x_test', X)
+        return_folds = kwargs.get('return_folds', False)
         """Generates Venn-ABERS calibrated regression intervals and predictions.
 
         Parameters
@@ -1472,7 +1500,7 @@ class VennAberRegressor:
             Dictionary containing 'mid' and 'range' for each individual fold.
             Returned only if `return_folds` is True.
         """
-        intervals_mid, intervals_range = self.va_calibrator.predict_interval(_x_test)
+        intervals_mid, intervals_range = self.va_calibrator_.predict_interval(_x_test)
         folds = {}
         if return_folds:
             folds = {'mid': intervals_mid, 'range': intervals_range}
