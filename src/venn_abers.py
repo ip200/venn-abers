@@ -654,11 +654,10 @@ class VennAbersCV(BaseEstimator, ClassifierMixin):
     def fit(self, X=None, y=None, **kwargs):
         _x_train = kwargs.pop('_x_train', X)
         _y_train = kwargs.pop('_y_train', y)
-        self.c_p_cals_ = self.c_p_cals = []
-        self.c_p_tests_ = self.c_p_tests = []
-        self.estimators_ = self.estimators = []
         self.clf_p_cal_ = self.clf_p_cal = []
         self.clf_y_cal_ = self.clf_y_cal = []
+        self.clf_y_cal_lower_ = self.clf_y_cal_lower = []
+        self.clf_y_cal_upper_ = self.clf_y_cal_upper = []
         self.y_stars_lower_ = self.y_stars_lower = []
         self.y_stars_upper_ = self.y_stars_upper = []
         self.estimators_ = self.estimators = []
@@ -694,15 +693,28 @@ class VennAbersCV(BaseEstimator, ClassifierMixin):
                     self.m_parameter = int(np.round(self.epsilon * (len(y_cal) + 1) / 2))
                 else:
                     self.epsilon = 2 * self.m_parameter / (len(y_cal) + 1)
+                
                 ordered_labels = np.sort(y_cal.flatten())
-                y_star_lower = ordered_labels[self.m_parameter - 1]
-                y_star_upper = ordered_labels[len(ordered_labels) - self.m_parameter]
-                y_starred = y_cal
-                y_starred[y_cal < y_star_lower] = y_star_lower
-                y_starred[y_cal > y_star_upper] = y_star_upper
-                self.clf_y_cal.append(y_starred)
-                self.y_stars_lower.append(y_star_lower)
-                self.y_stars_upper.append(y_star_upper)
+                k = len(ordered_labels)
+                m = self.m_parameter
+
+                # Asymmetric moderation for regression bounds
+                # Step 4: For f* (upper bound)
+                y_star_upper_val = ordered_labels[k - m]
+                y_cal_upper = y_cal.copy()
+                y_cal_upper[y_cal < ordered_labels[m]] = ordered_labels[m]
+                y_cal_upper[y_cal > ordered_labels[k - m]] = ordered_labels[k - m]
+                
+                # Step 7: For f_* (lower bound)
+                y_star_lower_val = ordered_labels[m - 1]
+                y_cal_lower = y_cal.copy()
+                y_cal_lower[y_cal < ordered_labels[m - 1]] = ordered_labels[m - 1]
+                y_cal_lower[y_cal > ordered_labels[k - m - 1]] = ordered_labels[k - m - 1]
+
+                self.clf_y_cal_lower.append(y_cal_lower)
+                self.clf_y_cal_upper.append(y_cal_upper)
+                self.y_stars_lower.append(y_star_lower_val)
+                self.y_stars_upper.append(y_star_upper_val)
             if self.setting == 'classification':
                 clf_score = self.estimator.predict_proba(x_cal)
                 self.clf_y_cal.append(y_cal)
@@ -729,14 +741,26 @@ class VennAbersCV(BaseEstimator, ClassifierMixin):
                 else:
                     clf_score = self.estimator.predict(_x_train[test_index])
                     ordered_labels = np.sort(_y_train[test_index])
-                    y_star_lower = ordered_labels[self.m_parameter + 1]
-                    y_star_upper = ordered_labels[len(ordered_labels) - self.m_parameter - 1]
-                    y_starred = _y_train[test_index]
-                    y_starred[_y_train[test_index] < y_star_lower] = y_star_lower
-                    y_starred[_y_train[test_index] > y_star_upper] = y_star_upper
-                    self.clf_y_cal.append(y_starred)
-                    self.y_stars_lower.append(y_star_lower)
-                    self.y_stars_upper.append(y_star_upper)
+                    k = len(ordered_labels)
+                    m = self.m_parameter
+
+                    # Asymmetric moderation for regression bounds
+                    # Step 4: For f* (upper bound)
+                    y_star_upper_val = ordered_labels[k - m]
+                    y_cal_upper = _y_train[test_index].copy()
+                    y_cal_upper[_y_train[test_index] < ordered_labels[m]] = ordered_labels[m]
+                    y_cal_upper[_y_train[test_index] > ordered_labels[k - m]] = ordered_labels[k - m]
+                    
+                    # Step 7: For f_* (lower bound)
+                    y_star_lower_val = ordered_labels[m - 1]
+                    y_cal_lower = _y_train[test_index].copy()
+                    y_cal_lower[_y_train[test_index] < ordered_labels[m - 1]] = ordered_labels[m - 1]
+                    y_cal_lower[_y_train[test_index] > ordered_labels[k - m - 1]] = ordered_labels[k - m - 1]
+
+                    self.clf_y_cal_lower.append(y_cal_lower)
+                    self.clf_y_cal_upper.append(y_cal_upper)
+                    self.y_stars_lower.append(y_star_lower_val)
+                    self.y_stars_upper.append(y_star_upper_val)
                 self.clf_p_cal.append(clf_score)
 
     def predict_proba(self, X=None, **kwargs):
@@ -817,20 +841,26 @@ class VennAbersCV(BaseEstimator, ClassifierMixin):
 
         clf_score_test = self.estimator.predict(_x_test)
         for i in range(self.n_splits):
-            va = VennAbers(setting=self.setting)
-            va.fit(p_cal=self.clf_p_cal[i], y_cal=self.clf_y_cal[i])
-            _, interval = va.predict_proba(p_test=clf_score_test)
+            # Fit lower bound calibrator
+            va_lower = VennAbers(setting=self.setting)
+            va_lower.fit(p_cal=self.clf_p_cal[i], y_cal=self.clf_y_cal_lower[i])
+            _, interval_lower = va_lower.predict_proba(p_test=clf_score_test)
+            
+            # Fit upper bound calibrator
+            va_upper = VennAbers(setting=self.setting)
+            va_upper.fit(p_cal=self.clf_p_cal[i], y_cal=self.clf_y_cal_upper[i])
+            _, interval_upper = va_upper.predict_proba(p_test=clf_score_test)
+            
+            # Paper interval [f_*, f*]
+            y_lower = interval_lower[:, 0]
+            y_upper = interval_upper[:, 1]
+            interval = np.column_stack((y_lower, y_upper))
             intervals_range.append(interval)
 
-            mid_1 = \
-                (interval[:, 0] -
-                 self.y_stars_lower_[i]) / (interval[:, 0] - self.y_stars_lower_[i] + self.y_stars_upper_[i] -
-                                           interval[:, 1]) * interval[:, 0]
-
-            mid_2 = \
-                (self.y_stars_upper_[i] -
-                 interval[:, 1]) / (interval[:, 0] - self.y_stars_lower_[i] + self.y_stars_upper_[i] -
-                                           interval[:, 1]) * interval[:, 1]
+            # Point prediction merging (Formula 6)
+            denominator = (y_lower - self.y_stars_lower_[i] + self.y_stars_upper_[i] - y_upper)
+            mid_1 = (y_lower - self.y_stars_lower_[i]) / denominator * y_lower
+            mid_2 = (self.y_stars_upper_[i] - y_upper) / denominator * y_upper
 
             intervals_mid.append(mid_1 + mid_2)
 
@@ -1355,7 +1385,7 @@ class VennAbersCalibrator(BaseEstimator, ClassifierMixin):
         return y_pred
 
 
-class VennAberRegressor(BaseEstimator, RegressorMixin):
+class VennAbersRegressor(BaseEstimator, RegressorMixin):
     """ A wrapper for Venn-ABERS regression
 
            A class implementing a novel Venn-ABERS regression algorithm.
