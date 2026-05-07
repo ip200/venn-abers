@@ -6,6 +6,7 @@ from sklearn.exceptions import NotFittedError
 from sklearn.base import BaseEstimator, ClassifierMixin, RegressorMixin
 from sklearn.utils.multiclass import unique_labels
 import pandas as pd
+from typing import Union, Tuple, Optional, Any
 
 np.seterr(divide='ignore', invalid='ignore')
 
@@ -497,7 +498,7 @@ class VennAbers(BaseEstimator, ClassifierMixin):
     def __init__(self, setting='classification'):
         self.setting = setting
 
-    def fit(self, X=None, y=None, **kwargs):
+    def fit(self, X: Optional[np.ndarray] = None, y: Optional[np.ndarray] = None, **kwargs: Any) -> "VennAbers":
         """Fits the VennAbers calibrator to the calibration dataset
 
 
@@ -522,7 +523,7 @@ class VennAbers(BaseEstimator, ClassifierMixin):
         self.c = self.c_
         return self
         
-    def predict(self, X=None, **kwargs):
+    def predict(self, X: Optional[np.ndarray] = None, **kwargs: Any) -> np.ndarray:
         """Generates Venn-ABERS calibrated binary class predictions.
 
         Parameters
@@ -538,7 +539,7 @@ class VennAbers(BaseEstimator, ClassifierMixin):
         p_prime, _ = self.predict_proba(X, **kwargs)
         return (p_prime[:, 1] >= 0.5).astype(int)
 
-    def predict_proba(self, X=None, **kwargs):
+    def predict_proba(self, X: Optional[np.ndarray] = None, **kwargs: Any) -> Tuple[np.ndarray, np.ndarray]:
         """Generates Venn-Abers probability estimates
 
 

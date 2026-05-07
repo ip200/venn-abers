@@ -1,6 +1,6 @@
 from sklearn.utils.estimator_checks import check_estimator
 import pytest
-from venn_abers import VennAbersCalibrator, VennAberRegressor, VennAbers, VennAbersCV, VennAbersMultiClass
+from venn_abers import VennAbersCalibrator, VennAbersRegressor, VennAbers, VennAbersCV, VennAbersMultiClass
 from sklearn.naive_bayes import GaussianNB
 from sklearn.base import clone
 
