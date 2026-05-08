@@ -8,7 +8,7 @@ from sklearn.model_selection import train_test_split
 import sys
 import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../src')))
-from venn_abers import VennAbers, VennAbersCV, VennAbersMultiClass, VennAbersCalibrator, VennAberRegressor
+from venn_abers import VennAbers, VennAbersCV, VennAbersMultiClass, VennAbersCalibrator, VennAbersRegressor
 
 @pytest.fixture
 def binary_data():
@@ -101,7 +101,7 @@ def test_venn_abers_regressor_ivap(regression_data):
     X_train, X_test, y_train, y_test = regression_data
     
     reg = LinearRegression()
-    va_reg = VennAberRegressor(estimator=reg, inductive=True, cal_size=0.2, random_state=42)
+    va_reg = VennAbersRegressor(estimator=reg, inductive=True, cal_size=0.2, random_state=42)
     va_reg.fit(X_train, y_train)
     
     mid, interval = va_reg.predict(X_test)
@@ -115,7 +115,7 @@ def test_venn_abers_regressor_cvap(regression_data):
     
     reg = LinearRegression()
     # Adding epsilon to not have edge cases fail
-    va_reg = VennAberRegressor(estimator=reg, inductive=False, n_splits=3, random_state=42)
+    va_reg = VennAbersRegressor(estimator=reg, inductive=False, n_splits=3, random_state=42)
     va_reg.fit(X_train, y_train, m=1)
     
     mid, interval = va_reg.predict(X_test)

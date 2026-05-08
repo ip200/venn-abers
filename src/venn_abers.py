@@ -6,6 +6,7 @@ from sklearn.exceptions import NotFittedError
 from sklearn.base import BaseEstimator, ClassifierMixin, RegressorMixin
 from sklearn.utils.multiclass import unique_labels
 import pandas as pd
+from typing import Union, Tuple, Optional, Any
 
 np.seterr(divide='ignore', invalid='ignore')
 
@@ -497,10 +498,7 @@ class VennAbers(BaseEstimator, ClassifierMixin):
     def __init__(self, setting='classification'):
         self.setting = setting
 
-    def fit(self, X=None, y=None, **kwargs):
-        p_cal = kwargs.get('p_cal', X)
-        y_cal = kwargs.get('y_cal', y)
-        precision = kwargs.get('precision', None)
+    def fit(self, X: Optional[np.ndarray] = None, y: Optional[np.ndarray] = None, **kwargs: Any) -> "VennAbers":
         """Fits the VennAbers calibrator to the calibration dataset
 
 
@@ -516,18 +514,32 @@ class VennAbers(BaseEstimator, ClassifierMixin):
             Optional number of decimal points to which Venn-Abers calibration probabilities p_cal are rounded to.
             Yields significantly faster computation time for larger calibration datasets
         """
+        p_cal = kwargs.get('p_cal', X)
+        y_cal = kwargs.get('y_cal', y)
+        precision = kwargs.get('precision', None)
         self.p0_, self.p1_, self.c_ = calc_p0p1(p_cal, y_cal, precision, setting=self.setting)
         self.p0 = self.p0_
         self.p1 = self.p1_
         self.c = self.c_
         return self
         
-    def predict(self, X=None, **kwargs):
+    def predict(self, X: Optional[np.ndarray] = None, **kwargs: Any) -> np.ndarray:
+        """Generates Venn-ABERS calibrated binary class predictions.
+
+        Parameters
+        ----------
+        X : {array-like}, shape (n_samples, 2)
+            An array of probability outputs which are to be calibrated.
+
+        Returns
+        -------
+        y_pred : {array-like}, shape (n_samples,)
+            Predicted class labels (0 or 1).
+        """
         p_prime, _ = self.predict_proba(X, **kwargs)
         return (p_prime[:, 1] >= 0.5).astype(int)
 
-    def predict_proba(self, X=None, **kwargs):
-        p_test = kwargs.get('p_test', X)
+    def predict_proba(self, X: Optional[np.ndarray] = None, **kwargs: Any) -> Tuple[np.ndarray, np.ndarray]:
         """Generates Venn-Abers probability estimates
 
 
@@ -546,6 +558,7 @@ class VennAbers(BaseEstimator, ClassifierMixin):
             Associated multiprobability outputs
             (as described in Section 4 in https://arxiv.org/pdf/1511.00213.pdf)
         """
+        p_test = kwargs.get('p_test', X)
         p_prime, p0_p1 = calc_probs(self.p0_, self.p1_, self.c_, p_test, setting=self.setting)
         return p_prime, p0_p1
 
@@ -652,15 +665,6 @@ class VennAbersCV(BaseEstimator, ClassifierMixin):
 
         
     def fit(self, X=None, y=None, **kwargs):
-        _x_train = kwargs.pop('_x_train', X)
-        _y_train = kwargs.pop('_y_train', y)
-        self.clf_p_cal_ = self.clf_p_cal = []
-        self.clf_y_cal_ = self.clf_y_cal = []
-        self.clf_y_cal_lower_ = self.clf_y_cal_lower = []
-        self.clf_y_cal_upper_ = self.clf_y_cal_upper = []
-        self.y_stars_lower_ = self.y_stars_lower = []
-        self.y_stars_upper_ = self.y_stars_upper = []
-        self.estimators_ = self.estimators = []
         """ Fits the IVAP or CVAP calibrator to the training set.
 
         Parameters
@@ -671,6 +675,15 @@ class VennAbersCV(BaseEstimator, ClassifierMixin):
         _y_train : {array-like}, shape (n_samples,)
             Associated binary class labels.
         """
+        _x_train = kwargs.pop('_x_train', X)
+        _y_train = kwargs.pop('_y_train', y)
+        self.clf_p_cal_ = self.clf_p_cal = []
+        self.clf_y_cal_ = self.clf_y_cal = []
+        self.clf_y_cal_lower_ = self.clf_y_cal_lower = []
+        self.clf_y_cal_upper_ = self.clf_y_cal_upper = []
+        self.y_stars_lower_ = self.y_stars_lower = []
+        self.y_stars_upper_ = self.y_stars_upper = []
+        self.estimators_ = self.estimators = []
         if self.inductive:
             self.n_splits = 1
             estimator = self.estimator
@@ -764,9 +777,6 @@ class VennAbersCV(BaseEstimator, ClassifierMixin):
                 self.clf_p_cal.append(clf_score)
 
     def predict_proba(self, X=None, **kwargs):
-        _x_test = kwargs.get('_x_test', X)
-        loss = kwargs.get('loss', 'log')
-        p0_p1_output = kwargs.get('p0_p1_output', False)
         """ Generates Venn-ABERS calibrated probabilities.
 
 
@@ -790,6 +800,9 @@ class VennAbersCV(BaseEstimator, ClassifierMixin):
         p0_p1: {array-like}, default  = None
             Venn-ABERS calibrated p0 and p1 outputs (if p0_p1_output = True)
         """
+        _x_test = kwargs.get('_x_test', X)
+        loss = kwargs.get('loss', 'log')
+        p0_p1_output = kwargs.get('p0_p1_output', False)
 
         p0p1_test = []
         for i in range(self.n_splits):
@@ -819,23 +832,23 @@ class VennAbersCV(BaseEstimator, ClassifierMixin):
             return p_prime
 
     def predict_interval(self, X=None, **kwargs):
-        _x_test = kwargs.get('_x_test', X)
         """ Generates Venn-ABERS calibrated intervals
 
-                Parameters
-                ----------
-                _x_test : {array-like}, shape (n_samples,)
-                    Training set features
+        Parameters
+        ----------
+        _x_test : {array-like}, shape (n_samples,)
+            Training set features
 
 
-                Returns
-                ----------
-                p_prime: {array-like}, shape (n_samples,n_classses)
-                    Venn-ABERS calibrated interval-midpoint
+        Returns
+        ----------
+        p_prime: {array-like}, shape (n_samples,n_classses)
+            Venn-ABERS calibrated interval-midpoint
 
-                p_lower_p_upper: {array-like}, default  = None
-                    Venn-ABERS calibrated lower and upper regression intervals
-                """
+        p_lower_p_upper: {array-like}, default  = None
+            Venn-ABERS calibrated lower and upper regression intervals
+        """
+        _x_test = kwargs.get('_x_test', X)
         intervals_range = []
         intervals_mid = []
 
@@ -964,8 +977,6 @@ class VennAbersMultiClass(BaseEstimator, ClassifierMixin):
 
         
     def fit(self, X=None, y=None, **kwargs):
-        _x_train = kwargs.pop('_x_train', X)
-        _y_train = kwargs.pop('_y_train', y)
         """ Fits the Venn-ABERS calibrator to the training set
 
         Parameters
@@ -976,7 +987,9 @@ class VennAbersMultiClass(BaseEstimator, ClassifierMixin):
         _y_train : {array-like}, shape (n_samples,)
             Associated binary class labels.
 
-            """
+        """
+        _x_train = kwargs.pop('_x_train', X)
+        _y_train = kwargs.pop('_y_train', y)
 
         # integrity checks
         if not self.inductive and self.n_splits is None:
@@ -1017,32 +1030,35 @@ class VennAbersMultiClass(BaseEstimator, ClassifierMixin):
         return self
 
     def predict_proba(self, X=None, **kwargs):
+        """ 
+        Generates Venn-ABERS calibrated probabilities.
+
+
+        Parameters
+        ----------
+        _x_test : {array-like}, shape (n_samples,)
+            Training set numerical features
+
+        loss : str, default='log'
+            Log or Brier loss. For further details of calculation
+            see Section 4 in https://arxiv.org/pdf/1511.00213.pdf
+
+        p0_p1_output: bool, default = False
+        If True, function also returns a set p0_p1 binary probabilistic outputs for each fold
+
+        Returns
+        ----------
+        p_prime: {array-like}, shape (n_samples,n_classses)
+            Venn-ABERS calibrated probabilities
+
+        p0_p1: {array-like}, default  = None
+        Venn-ABERS calibrated p0 and p1 outputs (if p0_p1_output = True)
+        """
+
         _x_test = kwargs.get('_x_test', X)
         loss = kwargs.get('loss', 'log')
         p0_p1_output = kwargs.get('p0_p1_output', False)
-        """ Generates Venn-ABERS calibrated probabilities.
 
-
-            Parameters
-            ----------
-            _x_test : {array-like}, shape (n_samples,)
-                Training set numerical features
-
-            loss : str, default='log'
-                Log or Brier loss. For further details of calculation
-                see Section 4 in https://arxiv.org/pdf/1511.00213.pdf
-
-            p0_p1_output: bool, default = False
-            If True, function also returns a set p0_p1 binary probabilistic outputs for each fold
-
-            Returns
-            ----------
-            p_prime: {array-like}, shape (n_samples,n_classses)
-                Venn-ABERS calibrated probabilities
-
-            p0_p1: {array-like}, default  = None
-            Venn-ABERS calibrated p0 and p1 outputs (if p0_p1_output = True)
-            """
 
         self.multiclass_probs = []
         self.multiclass_p0p1 = []
@@ -1210,8 +1226,6 @@ class VennAbersCalibrator(BaseEstimator, ClassifierMixin):
 
         
     def fit(self, X=None, y=None, **kwargs):
-        _x_train = kwargs.pop('_x_train', X)
-        _y_train = kwargs.pop('_y_train', y)
         """ Fits the Venn-ABERS calibrator to the training set when underlying sci-kit learn classifier is provided
             (IVAP and CVAP only)
 
@@ -1225,6 +1239,8 @@ class VennAbersCalibrator(BaseEstimator, ClassifierMixin):
                 Associated binary class labels.
 
         """
+        _x_train = kwargs.pop('_x_train', X)
+        _y_train = kwargs.pop('_y_train', y)
 
         # integrity checks
         if not self.inductive and self.n_splits is None:
@@ -1255,13 +1271,6 @@ class VennAbersCalibrator(BaseEstimator, ClassifierMixin):
         return self
 
     def predict_proba(self, X=None, **kwargs):
-        _x_test = kwargs.get('_x_test', X)
-        p_cal = kwargs.get('p_cal', None)
-        y_cal = kwargs.get('y_cal', None)
-        p_test = kwargs.get('p_test', None)
-        loss = kwargs.get('loss', 'log')
-        p0_p1_output = kwargs.get('p0_p1_output', False)
-        va_type = kwargs.get('va_type', 'one_vs_one')
         """ Generates Venn-ABERS calibrated probabilities.
 
             Parameters
@@ -1301,6 +1310,13 @@ class VennAbersCalibrator(BaseEstimator, ClassifierMixin):
                 Each list is an array of shape (n_samples, n_folds * 2), with the first n_folds entries
                 in each row corresponding to p0 outputs and last n_folds to p1 outputs.
         """
+        _x_test = kwargs.get('_x_test', X)
+        p_cal = kwargs.get('p_cal', None)
+        y_cal = kwargs.get('y_cal', None)
+        p_test = kwargs.get('p_test', None)
+        loss = kwargs.get('loss', 'log')
+        p0_p1_output = kwargs.get('p0_p1_output', False)
+        va_type = kwargs.get('va_type', 'one_vs_one')
 
         if p_cal is None and self.estimator is None:
             raise Exception("Please provide either an underlying algorithm or a calibration set")
@@ -1340,41 +1356,42 @@ class VennAbersCalibrator(BaseEstimator, ClassifierMixin):
             return p_prime
 
     def predict(self, X=None, **kwargs):
+        """ 
+        Generates Venn-ABERS calibrated prediction labels.
+
+        Parameters
+        ----------
+        _x_test : {array-like}, shape (n_samples,)
+            Training set numerical or categorical features (only for IVAP and CVAP when underlying classsifier
+            is provided to fit). If categorical, features are one hot encoded using pandas.get_dummies()
+
+        p_cal = {array-like}, shape (n_samples,)
+            Calibration set probabilities  (Manual Venn-ABERS only)
+
+        y_cal = {array-like}, shape (n_samples,)
+            Calibration set labels (Manual Venn-ABERS only)
+
+        p_test = {array-like}, shape (n_samples,)
+            Test set probabilities (Manual Venn-ABERS only)
+
+        one_hot: bool, default=True
+            If True returns one hot encoded labels, class labels otherwise
+
+        loss : str, default='log'
+            Log or Brier loss (for IVAP and CVAP only). For further details of calculation
+            see Section 4 in https://arxiv.org/pdf/1511.00213.pdf
+
+        Returns
+        ----------
+        y_pred: {array-like}, shape (n_samples,)
+            Venn-ABERS calibrated predicted labels
+        """
         _x_test = kwargs.get('_x_test', X)
         p_cal = kwargs.get('p_cal', None)
         y_cal = kwargs.get('y_cal', None)
         p_test = kwargs.get('p_test', None)
         loss = kwargs.get('loss', 'log')
         one_hot = kwargs.get('one_hot', True)
-        """ Generates Venn-ABERS calibrated prediction labels.
-
-                Parameters
-                ----------
-                _x_test : {array-like}, shape (n_samples,)
-                    Training set numerical or categorical features (only for IVAP and CVAP when underlying classsifier
-                    is provided to fit). If categorical, features are one hot encoded using pandas.get_dummies()
-
-                p_cal = {array-like}, shape (n_samples,)
-                    Calibration set probabilities  (Manual Venn-ABERS only)
-
-                y_cal = {array-like}, shape (n_samples,)
-                    Calibration set labels (Manual Venn-ABERS only)
-
-                p_test = {array-like}, shape (n_samples,)
-                    Test set probabilities (Manual Venn-ABERS only)
-
-                one_hot: bool, default=True
-                    If True returns one hot encoded labels, class labels otherwise
-
-                loss : str, default='log'
-                    Log or Brier loss (for IVAP and CVAP only). For further details of calculation
-                    see Section 4 in https://arxiv.org/pdf/1511.00213.pdf
-
-                Returns
-                ----------
-                y_pred: {array-like}, shape (n_samples,)
-                    Venn-ABERS calibrated predicted labels
-                """
         p_prime = self.predict_proba(_x_test=_x_test, p_cal=p_cal, y_cal=y_cal, p_test=p_test, loss=loss)
         idx = np.argmax(p_prime, axis=-1)
         if one_hot:
@@ -1454,10 +1471,6 @@ class VennAbersRegressor(BaseEstimator, RegressorMixin):
         self.shuffle = shuffle
 
     def fit(self, X=None, y=None, **kwargs):
-        _x_train = kwargs.pop('_x_train', X)
-        _y_train = kwargs.pop('_y_train', y)
-        m = kwargs.pop('m', 1)
-        epsilon = kwargs.pop('epsilon', None)
         """ Fits the Venn-ABERS regression calibrator to the training set when underlying sci-kit learn classifier
         is provided (IVAP and CVAP only)
 
@@ -1477,6 +1490,10 @@ class VennAbersRegressor(BaseEstimator, RegressorMixin):
             parameter controlling the exclusion of extreme labels, if not provided then epsilon = 2m / (k+1)
 
         """
+        _x_train = kwargs.pop('_x_train', X)
+        _y_train = kwargs.pop('_y_train', y)
+        m = kwargs.pop('m', 1)
+        epsilon = kwargs.pop('epsilon', None)
 
         # integrity checks
         if not self.inductive and self.n_splits is None:
@@ -1506,8 +1523,6 @@ class VennAbersRegressor(BaseEstimator, RegressorMixin):
         return self
 
     def predict(self, X=None, **kwargs):
-        _x_test = kwargs.get('_x_test', X)
-        return_folds = kwargs.get('return_folds', False)
         """Generates Venn-ABERS calibrated regression intervals and predictions.
 
         Parameters
@@ -1530,6 +1545,9 @@ class VennAbersRegressor(BaseEstimator, RegressorMixin):
             Dictionary containing 'mid' and 'range' for each individual fold.
             Returned only if `return_folds` is True.
         """
+        _x_test = kwargs.get('_x_test', X)
+        return_folds = kwargs.get('return_folds', False)
+
         intervals_mid, intervals_range = self.va_calibrator_.predict_interval(_x_test)
         folds = {}
         if return_folds:
