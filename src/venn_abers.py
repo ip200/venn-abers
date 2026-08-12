@@ -3,7 +3,7 @@ from sklearn.model_selection import StratifiedKFold, train_test_split, KFold
 from sklearn.multiclass import OneVsOneClassifier
 from sklearn.utils.validation import check_is_fitted, check_X_y, check_array
 from sklearn.exceptions import NotFittedError
-from sklearn.base import BaseEstimator, ClassifierMixin, RegressorMixin
+from sklearn.base import BaseEstimator, ClassifierMixin, RegressorMixin, clone
 from sklearn.utils.multiclass import unique_labels
 import pandas as pd
 from typing import Union, Tuple, Optional, Any
@@ -115,6 +115,7 @@ def calc_p0p1(p_cal, y_cal, precision=None, setting='classification'):
                     p1[i, 1] = grad
                 else:
                     p1[i, 1] = grad
+        p1[-1, 1] = 1.0
 
         p0 = np.zeros((len(c) + 1, 2))
         p0[1:, 0] = c
@@ -181,6 +182,7 @@ def calc_p0p1(p_cal, y_cal, precision=None, setting='classification'):
                     p1[i, 1] = grad
                 else:
                     p1[i, 1] = grad
+        p1[-1, 1] = np.max(k_label_sort)
 
         p0 = np.zeros((len(c) + 1, 2))
         p0[:-1, 0] = c
@@ -686,7 +688,7 @@ class VennAbersCV(BaseEstimator, ClassifierMixin):
         self.estimators_ = self.estimators = []
         if self.inductive:
             self.n_splits = 1
-            estimator = self.estimator
+            estimator = clone(self.estimator)
             estimator.fit(_x_train, _y_train.flatten(), **kwargs)
             self.estimators_.append(estimator)
             x_train_proper, x_cal, y_train_proper, y_cal = train_test_split(
@@ -698,12 +700,12 @@ class VennAbersCV(BaseEstimator, ClassifierMixin):
                 shuffle=self.shuffle,
                 stratify=self.stratify
             )
-            estimator = self.estimator
+            estimator = clone(self.estimator)
             estimator.fit(x_train_proper, y_train_proper.flatten() if y_train_proper.ndim > 1 else y_train_proper, **kwargs)
             self.estimators_.append(estimator)
             if self.setting == 'regression':
                 if self.epsilon:
-                    self.m_parameter = int(np.round(self.epsilon * (len(y_cal) + 1) / 2))
+                    self.m_parameter = int(np.floor(self.epsilon * (len(y_cal) + 1) / 2))
                 else:
                     self.epsilon = 2 * self.m_parameter / (len(y_cal) + 1)
                 
@@ -729,10 +731,10 @@ class VennAbersCV(BaseEstimator, ClassifierMixin):
                 self.y_stars_lower.append(y_star_lower_val)
                 self.y_stars_upper.append(y_star_upper_val)
             if self.setting == 'classification':
-                clf_score = self.estimator.predict_proba(x_cal)
+                clf_score = estimator.predict_proba(x_cal)
                 self.clf_y_cal.append(y_cal)
             else:
-                clf_score = self.estimator.predict(x_cal)
+                clf_score = estimator.predict(x_cal)
             self.clf_p_cal.append(clf_score)
 
         else:
@@ -741,21 +743,24 @@ class VennAbersCV(BaseEstimator, ClassifierMixin):
             else:
                 kf = KFold(n_splits=self.n_splits, shuffle=self.shuffle, random_state=self.random_state)
 
-            estimator = self.estimator
+            estimator = clone(self.estimator)
             estimator.fit(_x_train, _y_train.flatten(), **kwargs)
             self.estimators_.append(estimator)
             for train_index, test_index in kf.split(_x_train, _y_train):
-                estimator = self.estimator
+                estimator = clone(self.estimator)
                 estimator.fit(_x_train[train_index], _y_train[train_index].flatten(), **kwargs)
                 self.estimators_.append(estimator)
                 if self.setting == 'classification':
-                    clf_score = self.estimator.predict_proba(_x_train[test_index])
+                    clf_score = estimator.predict_proba(_x_train[test_index])
                     self.clf_y_cal.append(_y_train[test_index])
                 else:
-                    clf_score = self.estimator.predict(_x_train[test_index])
+                    clf_score = estimator.predict(_x_train[test_index])
                     ordered_labels = np.sort(_y_train[test_index])
                     k = len(ordered_labels)
-                    m = self.m_parameter
+                    if self.epsilon:
+                        m = int(np.floor(self.epsilon * (k + 1) / 2))
+                    else:
+                        m = self.m_parameter
 
                     # Asymmetric moderation for regression bounds
                     # Step 4: For f* (upper bound)
@@ -852,8 +857,10 @@ class VennAbersCV(BaseEstimator, ClassifierMixin):
         intervals_range = []
         intervals_mid = []
 
-        clf_score_test = self.estimator.predict(_x_test)
         for i in range(self.n_splits):
+            clf_score_test = self.estimators[0].predict(_x_test) if self.cv_ensemble is False else \
+                self.estimators[i + 1].predict(_x_test)
+
             # Fit lower bound calibrator
             va_lower = VennAbers(setting=self.setting)
             va_lower.fit(p_cal=self.clf_p_cal[i], y_cal=self.clf_y_cal_lower[i])
