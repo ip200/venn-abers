@@ -161,3 +161,8 @@ cython_debug/
 
 # macOS .DS_Store files
 .DS_Store
+
+# Data directories
+src/data/
+src/uci_datasets/
+src/iuci_datasets/
